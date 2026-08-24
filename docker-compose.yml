@@ -16,12 +16,24 @@ services:
       - NODE_ENV=production
       - API_PORT=3001
       - DATA_DIR=/app/data
+      - JOBSPY_URL=http://jobspy:8090
       # Set your OpenAI key here OR configure it in the Settings UI
       # - OPENAI_API_KEY=sk-...
     volumes:
       # Persist data (resumes, cover letters, settings) across restarts
       - jobaton_data:/app/data
+    depends_on:
+      - jobspy
+    restart: unless-stopped
+
+  jobspy:
+    build: ./jobspy
+    environment:
+      - CACHE_TTL_HOURS=6
+    volumes:
+      - jobspy_cache:/tmp/jobspy_cache
     restart: unless-stopped
 
 volumes:
   jobaton_data:
+  jobspy_cache:

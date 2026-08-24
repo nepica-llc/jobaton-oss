@@ -1,14 +1,17 @@
 import { useState, useEffect } from "react";
-import { ScanSearch, Loader2, CheckCircle, AlertTriangle, XCircle } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { ScanSearch, Loader2, CheckCircle, AlertTriangle, XCircle, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 
 export default function ATSScore() {
+  const navigate = useNavigate();
   const [resumes, setResumes] = useState<any[]>([]);
   const [selectedResume, setSelectedResume] = useState("");
   const [jobDescription, setJobDescription] = useState("");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<any>(null);
+  const [creatingJob, setCreatingJob] = useState(false);
 
   useEffect(() => {
     api.getResumes().then((data: any) => setResumes(data || [])).catch(() => {});
@@ -65,7 +68,7 @@ export default function ATSScore() {
             >
               <option value="">Choose a resume...</option>
               {resumes.map((r: any) => (
-                <option key={r.id} value={r.id}>{r.fullName || r.name}</option>
+                <option key={r.id} value={r.id}>{r.name || r.fullName || "Untitled"}</option>
               ))}
             </select>
           </div>
@@ -180,6 +183,41 @@ export default function ATSScore() {
                   </ul>
                 </div>
               )}
+
+              {/* Create Job Tile */}
+              <div className="pt-3 border-t border-gray-100">
+                <button
+                  onClick={async () => {
+                    setCreatingJob(true);
+                    try {
+                      const parsed = await api.parseJob(jobDescription);
+                      const job = await api.createJob({
+                        title: parsed.title || "Untitled Role",
+                        company: parsed.company || "Unknown",
+                        location: parsed.location || "",
+                        salary: parsed.salary || "",
+                        requirements: parsed.requirements || [],
+                        nice_to_have: parsed.nice_to_have || [],
+                        description_summary: parsed.description_summary || "",
+                        raw_description: jobDescription,
+                        status: "saved",
+                        prep_data: { ats: result, resume_id: selectedResume },
+                      });
+                      toast.success(`Job created: ${job.title}`);
+                      navigate(`/jobs/${job.id}`);
+                    } catch (err: any) {
+                      toast.error(err.message);
+                    } finally {
+                      setCreatingJob(false);
+                    }
+                  }}
+                  disabled={creatingJob}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 disabled:opacity-50 transition-colors"
+                >
+                  {creatingJob ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
+                  {creatingJob ? "Creating..." : "Add to Jobs & Open Prep Zone"}
+                </button>
+              </div>
             </div>
           )}
         </div>

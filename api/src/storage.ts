@@ -1,71 +1,124 @@
-import fs from "node:fs";
+import Database from "better-sqlite3";
 import path from "node:path";
+import fs from "node:fs";
 
 const DATA_DIR = process.env.DATA_DIR || path.resolve(process.cwd(), "../data");
+if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
-function ensureDir() {
-  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-}
+const dbPath = path.join(DATA_DIR, "jobaton.db");
+const db = new Database(dbPath);
+db.pragma("journal_mode = WAL");
 
-function filePath(collection: string): string {
-  return path.join(DATA_DIR, `${collection}.json`);
-}
+// ─── Schema ─────────────────────────────────────────────────────────────────
+db.exec(`
+  CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+  );
 
-export function readCollection<T = unknown>(collection: string): T[] {
-  ensureDir();
-  const fp = filePath(collection);
-  if (!fs.existsSync(fp)) return [];
-  try {
-    return JSON.parse(fs.readFileSync(fp, "utf-8"));
-  } catch {
-    return [];
-  }
-}
+  CREATE TABLE IF NOT EXISTS profile (
+    id TEXT PRIMARY KEY DEFAULT 'default',
+    data TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
 
-export function writeCollection<T = unknown>(collection: string, data: T[]): void {
-  ensureDir();
-  fs.writeFileSync(filePath(collection), JSON.stringify(data, null, 2));
-}
+  CREATE TABLE IF NOT EXISTS resumes (
+    id TEXT PRIMARY KEY,
+    data TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
 
-export function getById<T extends { id: string }>(collection: string, id: string): T | undefined {
-  return readCollection<T>(collection).find((item) => item.id === id);
-}
+  CREATE TABLE IF NOT EXISTS cover_letters (
+    id TEXT PRIMARY KEY,
+    data TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
 
-export function upsert<T extends { id: string }>(collection: string, item: T): T {
-  const items = readCollection<T>(collection);
-  const idx = items.findIndex((i) => i.id === item.id);
-  if (idx >= 0) {
-    items[idx] = { ...items[idx], ...item, updated_at: new Date().toISOString() };
-  } else {
-    (item as any).created_at = new Date().toISOString();
-    items.push(item);
-  }
-  writeCollection(collection, items);
-  return item;
-}
+  CREATE TABLE IF NOT EXISTS jobs (
+    id TEXT PRIMARY KEY,
+    data TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'saved',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+`);
 
-export function remove(collection: string, id: string): boolean {
-  const items = readCollection<{ id: string }>(collection);
-  const filtered = items.filter((i) => i.id !== id);
-  if (filtered.length === items.length) return false;
-  writeCollection(collection, filtered);
-  return true;
-}
-
+// ─── Settings ───────────────────────────────────────────────────────────────
 export function getSettings(): Record<string, string> {
-  ensureDir();
-  const fp = path.join(DATA_DIR, "settings.json");
-  if (!fs.existsSync(fp)) return {};
-  try {
-    return JSON.parse(fs.readFileSync(fp, "utf-8"));
-  } catch {
-    return {};
-  }
+  const rows = db.prepare("SELECT key, value FROM settings").all() as { key: string; value: string }[];
+  const settings: Record<string, string> = {};
+  for (const row of rows) settings[row.key] = row.value;
+  return settings;
 }
 
-export function saveSettings(data: Record<string, string>): void {
-  ensureDir();
-  const fp = path.join(DATA_DIR, "settings.json");
-  const existing = getSettings();
-  fs.writeFileSync(fp, JSON.stringify({ ...existing, ...data }, null, 2));
+export function saveSettings(settings: Record<string, string>): void {
+  const stmt = db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)");
+  const txn = db.transaction(() => {
+    for (const [key, value] of Object.entries(settings)) {
+      stmt.run(key, value);
+    }
+  });
+  txn();
+}
+
+// ─── Profile ────────────────────────────────────────────────────────────────
+export function getProfile(): any {
+  const row = db.prepare("SELECT data FROM profile WHERE id = 'default'").get() as { data: string } | undefined;
+  return row ? JSON.parse(row.data) : null;
+}
+
+export function saveProfile(data: any): any {
+  const now = new Date().toISOString();
+  db.prepare("INSERT OR REPLACE INTO profile (id, data, updated_at) VALUES ('default', ?, ?)").run(JSON.stringify(data), now);
+  return { ...data, updated_at: now };
+}
+
+// ─── Generic CRUD (resumes, cover_letters, jobs) ────────────────────────────
+export function readCollection<T = any>(table: string): T[] {
+  const rows = db.prepare(`SELECT id, data, created_at, updated_at FROM ${table} ORDER BY created_at DESC`).all() as any[];
+  return rows.map((r) => ({ ...JSON.parse(r.data), id: r.id, created_at: r.created_at, updated_at: r.updated_at }));
+}
+
+export function getById<T = any>(table: string, id: string): T | undefined {
+  const row = db.prepare(`SELECT data, created_at, updated_at FROM ${table} WHERE id = ?`).get(id) as any;
+  if (!row) return undefined;
+  return { ...JSON.parse(row.data), id, created_at: row.created_at, updated_at: row.updated_at };
+}
+
+export function upsert<T extends { id: string; status?: string }>(table: string, item: T): T {
+  const now = new Date().toISOString();
+  const existing = db.prepare(`SELECT created_at FROM ${table} WHERE id = ?`).get(item.id) as any;
+  const created = existing?.created_at || now;
+  const { id, created_at, updated_at, ...rest } = item as any;
+  const data = JSON.stringify(rest);
+
+  if (table === "jobs") {
+    db.prepare(`INSERT OR REPLACE INTO jobs (id, data, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`)
+      .run(item.id, data, (item as any).status || "saved", created, now);
+  } else {
+    db.prepare(`INSERT OR REPLACE INTO ${table} (id, data, created_at, updated_at) VALUES (?, ?, ?, ?)`)
+      .run(item.id, data, created, now);
+  }
+  return { ...rest, id: item.id, created_at: created, updated_at: now } as T;
+}
+
+export function remove(table: string, id: string): boolean {
+  const result = db.prepare(`DELETE FROM ${table} WHERE id = ?`).run(id);
+  return result.changes > 0;
+}
+
+// ─── Jobs-specific ──────────────────────────────────────────────────────────
+export function getJobsByStatus(status?: string): any[] {
+  if (status) {
+    const rows = db.prepare("SELECT id, data, status, created_at, updated_at FROM jobs WHERE status = ? ORDER BY updated_at DESC").all(status) as any[];
+    return rows.map((r) => ({ ...JSON.parse(r.data), id: r.id, status: r.status, created_at: r.created_at, updated_at: r.updated_at }));
+  }
+  const rows = db.prepare("SELECT id, data, status, created_at, updated_at FROM jobs ORDER BY updated_at DESC").all() as any[];
+  return rows.map((r) => ({ ...JSON.parse(r.data), id: r.id, status: r.status, created_at: r.created_at, updated_at: r.updated_at }));
+}
+
+export function writeCollection<T = unknown>(_table: string, _data: T[]): void {
+  // Legacy compat — no-op
 }
