@@ -1,3 +1,6 @@
 packages:
   - "api"
   - "web"
+allowBuilds:
+  better-sqlite3: false
+  esbuild: false

@@ -1,12 +1,15 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Jobaton OSS — AI Job Search Toolkit</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <script>
+      (function(){var t=localStorage.getItem('jobaton_theme');if(!t)t=window.matchMedia('(prefers-color-scheme:light)').matches?'light':'dark';document.documentElement.className=t;})();
+    </script>
   </head>
-  <body class="bg-gray-50 text-gray-900 antialiased">
+  <body class="antialiased">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

@@ -2,15 +2,227 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ─── Base ─── */
+html { font-size: 15px; }
+
 body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  transition: background 0.2s, color 0.2s;
 }
 
 @keyframes fade-in {
-  from { opacity: 0; transform: translateY(8px); }
+  from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
 .animate-fade-in {
-  animation: fade-in 0.3s ease-out;
+  animation: fade-in 0.2s ease-out;
 }
+
+/* ═══════════════════════════════════════════════════════
+   LIGHT THEME (default)
+   ═══════════════════════════════════════════════════════ */
+:root.light body { background: #f8f9fb; color: #0a2540; }
+
+:root.light .glass { background: rgba(255,255,255,0.72); backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.5); box-shadow: 0 2px 8px rgba(0,0,0,0.04); }
+:root.light .glass-card { background: rgba(255,255,255,0.72); backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.5); border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); }
+:root.light .glass-card:hover { background: rgba(255,255,255,0.88); border-color: rgba(0,0,0,0.08); }
+:root.light .glass-header { background: rgba(255,255,255,0.85); backdrop-filter: blur(24px); border-bottom: 1px solid rgba(0,0,0,0.06); }
+:root.light .glass-footer { background: rgba(255,255,255,0.7); border-top: 1px solid rgba(0,0,0,0.04); }
+
+:root.light .glass-btn { background: rgba(255,255,255,0.6); border: 1px solid rgba(0,0,0,0.08); color: #425466; transition: all 0.15s; }
+:root.light .glass-btn:hover { background: rgba(255,255,255,0.9); border-color: rgba(0,0,0,0.12); }
+:root.light .glass-btn-primary { background: #028FA2; border: 1px solid #028FA2; color: white; transition: all 0.15s; }
+:root.light .glass-btn-primary:hover { background: #027a8c; }
+
+:root.light .glass-input { background: rgba(255,255,255,0.6); border: 1px solid rgba(0,0,0,0.08); color: #0a2540; transition: all 0.15s; }
+:root.light .glass-input:focus { background: rgba(255,255,255,0.9); border-color: #028FA2; box-shadow: 0 0 0 3px rgba(2,143,162,0.1); outline: none; }
+
+:root.light .glass-stat { background: rgba(255,255,255,0.55); border: 1px solid rgba(255,255,255,0.5); transition: all 0.15s; }
+:root.light .glass-stat:hover { border-color: rgba(0,0,0,0.08); }
+:root.light .glass-stat-active { background: rgba(2,143,162,0.08); border: 1px solid rgba(2,143,162,0.25); }
+
+/* Light theme custom properties + utilities */
+:root.light {
+  --c-bg: #f8f9fb;
+  --c-card: rgba(255,255,255,0.72);
+  --c-text: #0a2540;
+  --c-text-2: #425466;
+  --c-text-3: #8898aa;
+  --c-border: rgba(0,0,0,0.06);
+  --c-accent: #028FA2;
+  --c-btn-solid-bg: #028FA2;
+  --c-btn-solid-text: #fff;
+}
+:root.light .th-bg { background: var(--c-bg); }
+:root.light .th-text { color: var(--c-text); }
+:root.light .th-text-secondary { color: var(--c-text-2); }
+:root.light .th-text-muted { color: var(--c-text-3); }
+:root.light .th-border { border-color: var(--c-border); }
+
+/* ═══════════════════════════════════════════════════════
+   DARK THEME — Neon accent, no solid fills
+   ═══════════════════════════════════════════════════════ */
+:root.dark body { background: #09090b; color: #e5e5e5; }
+
+:root.dark .glass { background: #111113; border: 1px solid rgba(255,255,255,0.06); }
+:root.dark .glass-card { background: #111113; border: 1px solid rgba(255,255,255,0.06); border-radius: 8px; }
+:root.dark .glass-card:hover { background: #18181b; border-color: rgba(2,143,162,0.15); }
+
+:root.dark .glass-header { background: #09090b; border-bottom: 1px solid rgba(255,255,255,0.06); }
+:root.dark .glass-footer { background: #09090b; border-top: 1px solid rgba(255,255,255,0.06); }
+
+/* Neon buttons — outlined with glow, never solid fill */
+:root.dark .glass-btn {
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.1);
+  color: #a1a1aa;
+  transition: all 0.15s;
+}
+:root.dark .glass-btn:hover {
+  border-color: rgba(255,255,255,0.2);
+  color: #e5e5e5;
+  box-shadow: 0 0 8px rgba(255,255,255,0.03);
+}
+
+:root.dark .glass-btn-primary {
+  background: transparent;
+  border: 1px solid rgba(2,143,162,0.5);
+  color: #2dd4bf;
+  transition: all 0.15s;
+  box-shadow: 0 0 6px rgba(2,143,162,0.15);
+}
+:root.dark .glass-btn-primary:hover {
+  background: rgba(2,143,162,0.08);
+  border-color: rgba(2,143,162,0.7);
+  color: #5eead4;
+  box-shadow: 0 0 14px rgba(2,143,162,0.25), 0 0 4px rgba(2,143,162,0.1);
+}
+
+:root.dark .glass-input {
+  background: #09090b;
+  border: 1px solid rgba(255,255,255,0.08);
+  color: #e5e5e5;
+  transition: all 0.15s;
+}
+:root.dark .glass-input:focus {
+  background: #09090b;
+  border-color: rgba(2,143,162,0.5);
+  box-shadow: 0 0 0 2px rgba(2,143,162,0.12), 0 0 8px rgba(2,143,162,0.1);
+  outline: none;
+}
+
+:root.dark .glass-stat {
+  background: #111113;
+  border: 1px solid rgba(255,255,255,0.06);
+  transition: all 0.15s;
+}
+:root.dark .glass-stat:hover { border-color: rgba(255,255,255,0.1); }
+:root.dark .glass-stat-active {
+  background: rgba(2,143,162,0.06);
+  border: 1px solid rgba(2,143,162,0.3);
+  box-shadow: 0 0 8px rgba(2,143,162,0.08);
+}
+
+/* Dark theme custom properties + utilities */
+:root.dark {
+  --c-bg: #09090b;
+  --c-card: #111113;
+  --c-text: #e5e5e5;
+  --c-text-2: #a1a1aa;
+  --c-text-3: #52525b;
+  --c-border: rgba(255,255,255,0.06);
+  --c-accent: #2dd4bf;
+  --c-btn-solid-bg: transparent;
+  --c-btn-solid-text: #2dd4bf;
+}
+:root.dark .th-bg { background: var(--c-bg); }
+:root.dark .th-text { color: var(--c-text); }
+:root.dark .th-text-secondary { color: var(--c-text-2); }
+:root.dark .th-text-muted { color: var(--c-text-3); }
+:root.dark .th-border { border-color: var(--c-border); }
+
+/* Also override inline bg-[#028FA2] buttons in dark to be neon */
+:root.dark .bg-\[\#028FA2\] {
+  background: transparent !important;
+  border: 1px solid rgba(2,143,162,0.5) !important;
+  color: #2dd4bf !important;
+  box-shadow: 0 0 6px rgba(2,143,162,0.15);
+}
+:root.dark .bg-\[\#028FA2\]:hover {
+  background: rgba(2,143,162,0.08) !important;
+  box-shadow: 0 0 14px rgba(2,143,162,0.25);
+}
+
+/* Neon select option backgrounds in dark */
+:root.dark select option {
+  background: #18181b;
+  color: #e5e5e5;
+}
+
+/* ─── Light-mode text color overrides ───
+   Pages use dark-theme colors like text-white, text-[#666], etc.
+   In light mode, remap them to appropriate light values. */
+/* ─── Dark-mode color overrides for bright elements ─── */
+:root.dark .text-gray-900 { color: #e5e5e5 !important; }
+:root.dark .text-gray-800 { color: #d4d4d8 !important; }
+:root.dark .text-gray-700 { color: #a1a1aa !important; }
+:root.dark .text-gray-600 { color: #a1a1aa !important; }
+:root.dark .text-gray-500 { color: #71717a !important; }
+:root.dark .text-gray-400 { color: #52525b !important; }
+:root.dark .text-gray-300 { color: #52525b !important; }
+:root.dark .bg-gray-100 { background: rgba(255,255,255,0.04) !important; }
+:root.dark .bg-gray-200 { background: rgba(255,255,255,0.06) !important; }
+:root.dark .bg-gray-50 { background: rgba(255,255,255,0.02) !important; }
+:root.dark .bg-green-50 { background: rgba(34,197,94,0.08) !important; }
+:root.dark .bg-green-50\/50 { background: rgba(34,197,94,0.06) !important; }
+:root.dark .bg-green-100 { background: rgba(34,197,94,0.12) !important; }
+:root.dark .bg-red-50 { background: rgba(239,68,68,0.08) !important; }
+:root.dark .bg-red-50\/50 { background: rgba(239,68,68,0.06) !important; }
+:root.dark .bg-red-100 { background: rgba(239,68,68,0.12) !important; }
+:root.dark .bg-amber-50 { background: rgba(234,179,8,0.08) !important; }
+:root.dark .bg-amber-100 { background: rgba(234,179,8,0.12) !important; }
+:root.dark .bg-purple-50 { background: rgba(147,51,234,0.08) !important; }
+:root.dark .bg-purple-50\/50 { background: rgba(147,51,234,0.06) !important; }
+:root.dark .bg-purple-100 { background: rgba(147,51,234,0.12) !important; }
+:root.dark .border-green-200 { border-color: rgba(34,197,94,0.2) !important; }
+:root.dark .border-red-200 { border-color: rgba(239,68,68,0.2) !important; }
+:root.dark .border-amber-200 { border-color: rgba(234,179,8,0.2) !important; }
+:root.dark .border-purple-200 { border-color: rgba(147,51,234,0.2) !important; }
+:root.dark .text-green-700 { color: #4ade80 !important; }
+:root.dark .text-green-800 { color: #4ade80 !important; }
+:root.dark .text-green-600 { color: #4ade80 !important; }
+:root.dark .text-red-700 { color: #f87171 !important; }
+:root.dark .text-red-800 { color: #f87171 !important; }
+:root.dark .text-amber-700 { color: #fbbf24 !important; }
+:root.dark .text-amber-600 { color: #fbbf24 !important; }
+:root.dark .text-purple-700 { color: #c084fc !important; }
+:root.dark .text-purple-900 { color: #c084fc !important; }
+:root.dark .text-purple-500 { color: #a78bfa !important; }
+:root.dark .border-gray-200 { border-color: rgba(255,255,255,0.06) !important; }
+:root.dark .border-gray-100 { border-color: rgba(255,255,255,0.04) !important; }
+:root.dark .text-\[\#1a1a1a\] { color: #a1a1aa !important; }
+:root.dark .bg-white { background: #18181b !important; }
+
+/* Download PDF / solid bg-[#028FA2] buttons: neon in dark, subtle border in light */
+:root.light .bg-\[\#028FA2\] { border: 1px solid #028FA2; }
+:root.dark .hover\:bg-gray-200:hover { background: rgba(255,255,255,0.08) !important; }
+:root.dark .hover\:bg-gray-100:hover { background: rgba(255,255,255,0.06) !important; }
+
+/* ─── Light-mode text color overrides ─── */
+:root.light .text-white { color: #0a2540 !important; }
+:root.light .text-\[\#666\] { color: #8898aa !important; }
+:root.light .text-\[\#888\] { color: #425466 !important; }
+:root.light .text-\[\#555\] { color: #8898aa !important; }
+:root.light .text-\[\#ccc\] { color: #425466 !important; }
+:root.light .border-white\/\[0\.06\] { border-color: rgba(0,0,0,0.06) !important; }
+:root.light .border-white\/\[0\.04\] { border-color: rgba(0,0,0,0.04) !important; }
+:root.light .border-white\/10 { border-color: rgba(0,0,0,0.08) !important; }
+:root.light .bg-white\/\[0\.06\] { background: rgba(0,0,0,0.03) !important; }
+:root.light .bg-white\/\[0\.04\] { background: rgba(0,0,0,0.02) !important; }
+:root.light .bg-white\/\[0\.03\] { background: rgba(0,0,0,0.015) !important; }
+:root.light .bg-white\/\[0\.02\] { background: rgba(0,0,0,0.01) !important; }
+:root.light .bg-\[\#0a0a0a\] { background: #f8f9fb !important; }
+:root.light .bg-\[\#1a1a1a\] { background: #fff !important; }
+:root.light .bg-black\/70 { background: rgba(0,0,0,0.4) !important; }
+:root.light .divide-white\/\[0\.04\] > * + * { border-color: rgba(0,0,0,0.04) !important; }

@@ -1,69 +1,90 @@
-import { NavLink, Outlet } from "react-router-dom";
-import { FileText, ScanSearch, Mail, MessageSquare, Settings, Briefcase } from "lucide-react";
+import { NavLink, Outlet, Link } from "react-router-dom";
+import { FileText, Settings, Briefcase, User, ClipboardList, LayoutDashboard, Crown, Sun, Moon } from "lucide-react";
+import { useTheme } from "@/lib/theme";
 
 const nav = [
-  { to: "/", icon: FileText, label: "Resume" },
-  { to: "/ats", icon: ScanSearch, label: "ATS Score" },
-  { to: "/cover-letter", icon: Mail, label: "Cover Letter" },
-  { to: "/interview", icon: MessageSquare, label: "Interview" },
+  { to: "/", icon: LayoutDashboard, label: "Dashboard" },
+  { to: "/resume", icon: FileText, label: "Base Resumes" },
+  { to: "/jobs", icon: ClipboardList, label: "Jobs" },
+  { to: "/profile", icon: User, label: "Profile" },
   { to: "/settings", icon: Settings, label: "Settings" },
 ];
 
 export default function Layout() {
-  return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
-      {/* Top nav */}
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center h-14 gap-8">
-            {/* Logo */}
-            <div className="flex items-center gap-2 shrink-0">
-              <div className="h-8 w-8 rounded-lg bg-blue-600 flex items-center justify-center">
-                <Briefcase className="h-4 w-4 text-white" />
-              </div>
-              <span className="font-bold text-lg text-gray-900">
-                Job<span className="text-blue-600">aton</span>
-                <span className="text-[10px] ml-1 text-gray-400 font-normal">OSS</span>
-              </span>
-            </div>
+  const { theme, toggle } = useTheme();
+  const isDark = theme === "dark";
 
-            {/* Nav links */}
-            <nav className="flex items-center gap-1 overflow-x-auto">
+  return (
+    <div className="min-h-screen th-bg flex flex-col transition-colors">
+      {/* Top nav */}
+      <header className="glass-header sticky top-0 z-20">
+        <div className="max-w-[1440px] mx-auto px-8">
+          <div className="flex items-center h-14 gap-6">
+            <Link to="/" className="flex items-center gap-2 shrink-0 hover:opacity-80 transition-opacity">
+              <img src="/logo.png" alt="Jobaton" className="h-6 w-6 rounded object-contain" />
+              <span className={`font-semibold text-sm ${isDark ? "text-white" : "text-[#0a2540]"}`}>
+                Jobaton <span className={`text-[10px] font-normal ${isDark ? "text-[#555]" : "text-[#8898aa]"}`}>OSS</span>
+              </span>
+            </Link>
+
+            <nav className="flex items-center gap-0.5 overflow-x-auto flex-1">
               {nav.map(({ to, icon: Icon, label }) => (
                 <NavLink
                   key={to}
                   to={to}
                   end={to === "/"}
                   className={({ isActive }) =>
-                    `flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
+                    `flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[13px] font-medium transition-all whitespace-nowrap ${
                       isActive
-                        ? "bg-blue-50 text-blue-700"
-                        : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                        ? isDark ? "text-white bg-white/[0.06]" : "text-[#0a2540] bg-black/[0.04]"
+                        : isDark ? "text-[#888] hover:text-white" : "text-[#8898aa] hover:text-[#0a2540]"
                     }`
                   }
                 >
-                  <Icon className="h-4 w-4" />
+                  <Icon className="h-3.5 w-3.5" />
                   {label}
                 </NavLink>
               ))}
             </nav>
+
+            {/* Theme toggle */}
+            <button
+              onClick={toggle}
+              className={`p-1.5 rounded-md transition-all ${isDark ? "text-[#888] hover:text-amber-300 hover:bg-white/[0.04]" : "text-[#8898aa] hover:text-[#0a2540] hover:bg-black/[0.04]"}`}
+              title={isDark ? "Switch to light mode" : "Switch to dark mode"}
+            >
+              {isDark ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
+            </button>
+
+            <a
+              href="https://jobaton.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className={`flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-medium rounded-md transition-all shrink-0 ${
+                isDark
+                  ? "text-amber-400 border border-amber-400/20 hover:bg-amber-400/5"
+                  : "text-amber-700 border border-amber-300/40 hover:bg-amber-50"
+              }`}
+            >
+              <Crown className="h-3 w-3" /> Pro
+            </a>
           </div>
         </div>
       </header>
 
       {/* Main content */}
       <main className="flex-1">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <div className="max-w-[1440px] mx-auto px-8 py-8">
           <Outlet />
         </div>
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-gray-200 bg-white py-3">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between text-xs text-gray-400">
+      <footer className="glass-footer py-3">
+        <div className={`max-w-[1440px] mx-auto px-8 flex items-center justify-between text-[11px] ${isDark ? "text-[#555]" : "text-[#8898aa]"}`}>
           <span>Jobaton OSS — Self-hosted AI career toolkit</span>
-          <a href="https://jobaton.com" target="_blank" rel="noopener noreferrer" className="hover:text-blue-600 transition-colors">
-            Upgrade to Jobaton Pro
+          <a href="https://jobaton.com" target="_blank" rel="noopener noreferrer" className="hover:text-[#028FA2] transition-colors">
+            jobaton.com
           </a>
         </div>
       </footer>
