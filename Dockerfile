@@ -50,6 +50,8 @@ EXPOSE 3001
 
 ENV NODE_ENV=production
 ENV API_PORT=3001
+# Must listen on all interfaces inside the container; exposure is controlled by the published port.
+ENV HOST=0.0.0.0
 ENV DATA_DIR=/app/data
 
 CMD ["node", "dist/index.js"]
