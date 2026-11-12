@@ -13,7 +13,6 @@
 ## Quick Start
 
 ```bash
-
 # Option 1: Pull from Docker Hub (easiest)
 docker run -p 127.0.0.1:3050:3001 -v jobaton_data:/app/data nepica/jobaton
 

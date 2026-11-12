@@ -171,7 +171,6 @@ function getAIClient(bodyKey?: string): { client: OpenAI; model: string } | null
   return { client, model: defaultModel };
 }
 
-
 // ---------------------------------------------------------------------------
 // AI: Chat completion (generic endpoint used by all features)
 // ---------------------------------------------------------------------------
