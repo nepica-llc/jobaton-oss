@@ -7,8 +7,11 @@ import { v4 as uuid } from "uuid";
 
 const app = express();
 const PORT = Number(process.env.API_PORT) || 3001;
+// Localhost by default; the Docker image sets HOST=0.0.0.0 and compose publishes on 127.0.0.1 only.
+const HOST = process.env.HOST || "127.0.0.1";
 
-app.use(cors());
+// UI is served same-origin (Vite proxy in dev, static in Docker), so cross-origin is off unless CORS_ORIGIN is set.
+app.use(cors({ origin: process.env.CORS_ORIGIN?.split(",") ?? false }));
 app.use(express.json({ limit: "10mb" }));
 
 // ---------------------------------------------------------------------------
@@ -168,12 +171,6 @@ function getAIClient(bodyKey?: string): { client: OpenAI; model: string } | null
   return { client, model: defaultModel };
 }
 
-// Backwards compat wrapper
-function getOpenAIClient(bodyKey?: string): OpenAI | null {
-  const result = getAIClient(bodyKey);
-  return result?.client || null;
-}
-
 // ---------------------------------------------------------------------------
 // AI: Chat completion (generic endpoint used by all features)
 // ---------------------------------------------------------------------------
@@ -208,12 +205,12 @@ app.post("/api/ai/chat", async (req, res) => {
 app.post("/api/ai/search-jobs", async (req, res) => {
   try {
     const { skills, title, location, experience, preferences, apiKey } = req.body;
-    const client = getOpenAIClient(apiKey);
-    if (!client) {
-      return res.status(400).json({ ok: false, error: "No API key configured. Go to Settings to add your OpenAI key." });
+    const ai = getAIClient(apiKey);
+    if (!ai) {
+      return res.status(400).json({ ok: false, error: "No API key configured. Go to Settings to add your AI provider key." });
     }
-    const completion = await client.chat.completions.create({
-      model: "gpt-4o-mini",
+    const completion = await ai.client.chat.completions.create({
+      model: ai.model,
       messages: [
         {
           role: "system",
@@ -274,12 +271,12 @@ app.delete("/api/jobspy/cache", async (_req, res) => {
 app.post("/api/ai/parse-job", async (req, res) => {
   try {
     const { rawDescription, apiKey } = req.body;
-    const client = getOpenAIClient(apiKey);
-    if (!client) {
-      return res.status(400).json({ ok: false, error: "No API key configured. Go to Settings to add your OpenAI key." });
+    const ai = getAIClient(apiKey);
+    if (!ai) {
+      return res.status(400).json({ ok: false, error: "No API key configured. Go to Settings to add your AI provider key." });
     }
-    const completion = await client.chat.completions.create({
-      model: "gpt-4o-mini",
+    const completion = await ai.client.chat.completions.create({
+      model: ai.model,
       messages: [
         {
           role: "system",
@@ -315,12 +312,12 @@ If a field is not found, use an empty string or empty array. Never add commentar
 app.post("/api/ai/tailor-resume", async (req, res) => {
   try {
     const { resumeText, jobDescription, apiKey } = req.body;
-    const client = getOpenAIClient(apiKey);
-    if (!client) {
+    const ai = getAIClient(apiKey);
+    if (!ai) {
       return res.status(400).json({ ok: false, error: "No API key configured." });
     }
-    const completion = await client.chat.completions.create({
-      model: "gpt-4o-mini",
+    const completion = await ai.client.chat.completions.create({
+      model: ai.model,
       messages: [
         {
           role: "system",
@@ -381,13 +378,13 @@ CRITICAL RULES:
 app.post("/api/ai/cover-letter", async (req, res) => {
   try {
     const { jobDescription, resumeText, tone, apiKey } = req.body;
-    const client = getOpenAIClient(apiKey);
-    if (!client) {
+    const ai = getAIClient(apiKey);
+    if (!ai) {
       return res.status(400).json({ ok: false, error: "No API key configured." });
     }
     const systemPrompt = `You are a professional cover letter writer. Write a compelling, personalized cover letter based on the resume and job description provided. Tone: ${tone || "professional"}. Output ONLY the cover letter text, no extra commentary.`;
-    const completion = await client.chat.completions.create({
-      model: "gpt-4o-mini",
+    const completion = await ai.client.chat.completions.create({
+      model: ai.model,
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: `RESUME:\n${resumeText}\n\nJOB DESCRIPTION:\n${jobDescription}` },
@@ -408,8 +405,8 @@ app.post("/api/ai/cover-letter", async (req, res) => {
 app.post("/api/ai/ats-score", async (req, res) => {
   try {
     const { resumeText, jobDescription, apiKey } = req.body;
-    const client = getOpenAIClient(apiKey);
-    if (!client) {
+    const ai = getAIClient(apiKey);
+    if (!ai) {
       return res.status(400).json({ ok: false, error: "No API key configured." });
     }
     const systemPrompt = `You are an ATS (Applicant Tracking System) expert and hiring manager. Perform a thorough analysis of the resume against the job description.
@@ -444,8 +441,8 @@ RULES:
 - strengths should highlight what the resume does well
 - redFlags should note potential concerns a recruiter might have
 - Provide at least 3 skillGaps, 5 suggestions, and 3 strengths`;
-    const completion = await client.chat.completions.create({
-      model: "gpt-4o-mini",
+    const completion = await ai.client.chat.completions.create({
+      model: ai.model,
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: `RESUME:\n${resumeText}\n\nJOB DESCRIPTION:\n${jobDescription}` },
@@ -468,8 +465,8 @@ RULES:
 app.post("/api/ai/study-guide", async (req, res) => {
   try {
     const { jobTitle, company, jobDescription, apiKey } = req.body;
-    const client = getOpenAIClient(apiKey);
-    if (!client) {
+    const ai = getAIClient(apiKey);
+    if (!ai) {
       return res.status(400).json({ ok: false, error: "No API key configured." });
     }
     const systemPrompt = `You are a technical learning coach. Based on the job description, create a study guide with EXACTLY 10 modules (no more, no less) that a candidate should complete to be fully prepared for this role.
@@ -502,8 +499,8 @@ Output as JSON:
 
 Make modules progressively build on each other. Include a mix of conceptual learning, hands-on practice, and quizzes.`;
 
-    const completion = await client.chat.completions.create({
-      model: "gpt-4o-mini",
+    const completion = await ai.client.chat.completions.create({
+      model: ai.model,
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: `JOB TITLE: ${jobTitle}\nCOMPANY: ${company || "Not specified"}\n\nJOB DESCRIPTION:\n${jobDescription}` },
@@ -526,8 +523,8 @@ Make modules progressively build on each other. Include a mix of conceptual lear
 app.post("/api/ai/study-content", async (req, res) => {
   try {
     const { mode, topic, moduleTitle, jobTitle, jobDescription, apiKey } = req.body;
-    const client = getOpenAIClient(apiKey);
-    if (!client) {
+    const ai = getAIClient(apiKey);
+    if (!ai) {
       return res.status(400).json({ ok: false, error: "No API key configured." });
     }
 
@@ -565,8 +562,8 @@ Output as JSON:
 }`;
     }
 
-    const completion = await client.chat.completions.create({
-      model: "gpt-4o-mini",
+    const completion = await ai.client.chat.completions.create({
+      model: ai.model,
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: `Module: ${moduleTitle}\nTopic: ${topic}\nJob: ${jobTitle}\nContext: ${jobDescription?.substring(0, 500) || ""}` },
@@ -589,8 +586,8 @@ Output as JSON:
 app.post("/api/ai/generate-lesson", async (req, res) => {
   try {
     const { skill, jobTitle, company, lessonTitle, lessonType, allLessonTitles, sprintDuration = 1, apiKey } = req.body;
-    const client = getOpenAIClient(apiKey);
-    if (!client) return res.status(400).json({ ok: false, error: "No API key configured." });
+    const ai = getAIClient(apiKey);
+    if (!ai) return res.status(400).json({ ok: false, error: "No API key configured." });
 
     const systemPrompt = `You are an expert technical trainer creating comprehensive, in-depth learning content for job interview preparation.
 
@@ -626,8 +623,8 @@ Rules:
 
     const userPrompt = `SKILL: ${skill}\nJOB TITLE: ${jobTitle}\nCOMPANY: ${company || "Company"}\nLESSON TYPE: ${lessonType}\n\nGENERATE THIS LESSON:\n${lessonTitle}\n\nALL LESSONS IN MODULE:\n${(allLessonTitles || []).map((t: string, i: number) => `${i + 1}. ${t}`).join("\n")}`;
 
-    const completion = await client.chat.completions.create({
-      model: "gpt-4o-mini",
+    const completion = await ai.client.chat.completions.create({
+      model: ai.model,
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
@@ -652,8 +649,8 @@ Rules:
 app.post("/api/ai/interview-prep", async (req, res) => {
   try {
     const { jobTitle, company, jobDescription, apiKey } = req.body;
-    const client = getOpenAIClient(apiKey);
-    if (!client) {
+    const ai = getAIClient(apiKey);
+    if (!ai) {
       return res.status(400).json({ ok: false, error: "No API key configured." });
     }
     const systemPrompt = `You are an interview preparation coach. Generate comprehensive interview preparation with EXACTLY 30 multiple-choice questions organized by difficulty.
@@ -700,8 +697,8 @@ CRITICAL RULES:
 - Hard questions: system design, architecture decisions, complex trade-offs, debugging scenarios
 - Questions should mix technical and behavioral relevant to the role
 - timeLimit: 120 for easy, 180 for medium, 300 for hard (in seconds)`;
-    const completion = await client.chat.completions.create({
-      model: "gpt-4o-mini",
+    const completion = await ai.client.chat.completions.create({
+      model: ai.model,
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: `JOB TITLE: ${jobTitle}\nCOMPANY: ${company || "Not specified"}\n\nJOB DESCRIPTION:\n${jobDescription}` },
@@ -724,8 +721,8 @@ CRITICAL RULES:
 app.post("/api/ai/mock-interview", async (req, res) => {
   try {
     const { jobTitle, jobDescription, resumeText, messages: chatHistory, apiKey } = req.body;
-    const client = getOpenAIClient(apiKey);
-    if (!client) {
+    const ai = getAIClient(apiKey);
+    if (!ai) {
       return res.status(400).json({ ok: false, error: "No API key configured." });
     }
     const systemPrompt = `You are conducting a mock interview for the position of ${jobTitle}. 
@@ -741,8 +738,8 @@ Keep responses concise (2-3 paragraphs max).`;
       ...(chatHistory || []),
     ];
 
-    const completion = await client.chat.completions.create({
-      model: "gpt-4o-mini",
+    const completion = await ai.client.chat.completions.create({
+      model: ai.model,
       messages,
       temperature: 0.7,
       max_tokens: 1024,
@@ -768,6 +765,6 @@ if (process.env.NODE_ENV === "production") {
 // ---------------------------------------------------------------------------
 // Start
 // ---------------------------------------------------------------------------
-app.listen(PORT, "0.0.0.0", () => {
-  console.log(`[jobaton-oss] API running on http://0.0.0.0:${PORT}`);
+app.listen(PORT, HOST, () => {
+  console.log(`[jobaton-oss] API running on http://${HOST}:${PORT}`);
 });

@@ -13,13 +13,12 @@
 ## Quick Start
 
 ```bash
-# Clone the repo
 # Option 1: Pull from Docker Hub (easiest)
-docker run -p 3050:3001 -v jobaton_data:/app/data nepica/jobaton
+docker run -p 127.0.0.1:3050:3001 -v jobaton_data:/app/data nepica/jobaton
 
 # Option 2: Clone and build locally
-git clone https://github.com/nepica-llc/jobaton.git
-cd jobaton
+git clone https://github.com/nepica-llc/jobaton-oss.git
+cd jobaton-oss
 docker compose up --build
 
 # Open http://localhost:3050
@@ -38,6 +37,11 @@ Set your AI key in the Settings page after launching, or via environment variabl
 # .env
 OPENAI_API_KEY=sk-...
 ```
+
+## Security
+
+Jobaton OSS has no login: it is meant to run on your own machine with your own AI key.
+The commands above publish it on `127.0.0.1` only. Don't expose it to a network unless it's behind a reverse proxy that adds authentication.
 
 ## Development (without Docker)
 
@@ -76,14 +80,14 @@ MIT — Free to use, modify, and distribute.
 
 ```bash
 docker pull nepica/jobaton
-docker run -d -p 3050:3001 -v jobaton_data:/app/data nepica/jobaton
+docker run -d -p 127.0.0.1:3050:3001 -v jobaton_data:/app/data nepica/jobaton
 ```
 
 See [nepica/jobaton on Docker Hub](https://hub.docker.com/r/nepica/jobaton) for all available tags.
 
 ## Contributing
 
-Contributions welcome! Please open issues and PRs on [GitHub](https://github.com/nepica-llc/jobaton).
+Contributions welcome! Please open issues and PRs on [GitHub](https://github.com/nepica-llc/jobaton-oss).
 
 ## Jobaton Pro
 

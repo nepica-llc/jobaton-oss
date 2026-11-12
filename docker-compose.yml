@@ -11,7 +11,8 @@ services:
   jobaton:
     build: .
     ports:
-      - "3050:3001"
+      # 127.0.0.1 = reachable only from this machine (the API has no auth). Drop it only behind an authenticating proxy.
+      - "127.0.0.1:3050:3001"
     environment:
       - NODE_ENV=production
       - API_PORT=3001
