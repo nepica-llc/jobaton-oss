@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { ArrowLeft, ArrowRight, ScanSearch, FileText, Mail, MessageSquare, Loader2, Copy, Sparkles, Check, X, Download, BookOpen } from "lucide-react";
+import { ArrowLeft, ArrowRight, ScanSearch, FileText, Mail, MessageSquare, Loader2, Copy, Sparkles, Check, X, Download, BookOpen, Volume2, VolumeX } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 
@@ -242,7 +242,7 @@ export default function JobPrep() {
           />
         )}
         {activeTab === "cover-letter" && <CoverLetterTab result={coverLetterResult} loading={tabLoading} onRun={runCoverLetter} />}
-        {activeTab === "study-guide" && <StudyGuideTab result={studyGuideResult} loading={tabLoading} onRun={runStudyGuide} jobTitle={job.title || ""} jobDescription={job.raw_description || ""} />}
+        {activeTab === "study-guide" && <StudyGuideTab result={studyGuideResult} loading={tabLoading} onRun={runStudyGuide} onSave={(training) => { const next = { ...studyGuideResult, training }; setStudyGuideResult(next); persistPrep({ study_guide: next }); }} jobTitle={job.title || ""} jobDescription={job.raw_description || ""} />}
         {activeTab === "interview" && <InterviewTab result={interviewResult} loading={tabLoading} onRun={runInterviewPrep} jobTitle={job.title || ""} jobDescription={job.raw_description || ""} />}
       </div>
 
@@ -717,18 +717,23 @@ interface Lesson {
   sections?: { heading: string; body: string; codeSnippet?: string }[];
   keyPoints?: string[];
   practicePrompt?: string;
-  quiz?: { question: string; options: string[]; correctIndex: number }[];
+  quiz?: { question: string; options: string[]; correctIndex: number; explanation?: string }[];
+  quizScore?: { correct: number; total: number };
 }
 
 const LESSON_TEMPLATES = [
   { title: "Core Concepts", type: "read" as const, duration: "20 min" },
-  { title: "Hands-on Practice", type: "practice" as const, duration: "30 min" },
+  { title: "Scenario Practice", type: "practice" as const, duration: "15 min" },
   { title: "Real-World Patterns", type: "read" as const, duration: "20 min" },
-  { title: "Guided Exercise", type: "practice" as const, duration: "30 min" },
+  { title: "Applied Scenarios", type: "practice" as const, duration: "15 min" },
   { title: "Knowledge Check", type: "quiz" as const, duration: "10 min" },
 ];
 
 function buildModulesFromGuide(data: any): TrainingModule[] {
+  // Saved progress (lesson content, scores, completion) wins over the bare outline.
+  if (Array.isArray(data?.training) && data.training.length > 0) {
+    return data.training.map((m: TrainingModule) => ({ ...m, lessons: m.lessons.map((l) => ({ ...l, generating: false })) }));
+  }
   const modules = (data?.modules || []).slice(0, 10).filter((m: any) => m?.title);
   return modules.map((mod: any) => ({
     skill: mod.title,
@@ -742,7 +747,17 @@ function buildModulesFromGuide(data: any): TrainingModule[] {
   }));
 }
 
-function StudyGuideTab({ result, loading, onRun, jobTitle, jobDescription }: { result: any; loading: boolean; onRun: () => void; jobTitle?: string; jobDescription?: string }) {
+function studyReadiness(modules: TrainingModule[]) {
+  const lessons = modules.flatMap((m) => m.lessons);
+  const scored = lessons.filter((l) => l.quizScore && l.quizScore.total > 0);
+  const correct = scored.reduce((a, l) => a + l.quizScore!.correct, 0);
+  const total = scored.reduce((a, l) => a + l.quizScore!.total, 0);
+  const accuracy = total > 0 ? correct / total : 0;
+  const coverage = lessons.length > 0 ? scored.length / lessons.length : 0;
+  return { readiness: Math.round(accuracy * coverage * 100), accuracy: Math.round(accuracy * 100), coverage: Math.round(coverage * 100), tested: scored.length, lessons: lessons.length };
+}
+
+function StudyGuideTab({ result, loading, onRun, onSave, jobTitle, jobDescription }: { result: any; loading: boolean; onRun: () => void; onSave: (training: TrainingModule[]) => void; jobTitle?: string; jobDescription?: string }) {
   const [modules, setModules] = useState<TrainingModule[]>([]);
   const [openModuleIdx, setOpenModuleIdx] = useState<number | null>(null);
   const [activeLesson, setActiveLesson] = useState<{ mod: number; lesson: number } | null>(null);
@@ -750,14 +765,29 @@ function StudyGuideTab({ result, loading, onRun, jobTitle, jobDescription }: { r
   const [genProgress, setGenProgress] = useState({ done: 0, total: 0 });
   const [showPodcastModal, setShowPodcastModal] = useState(false);
 
+  // Rebuild only when the outline changes (a new study guide), not when progress is saved back into result.
   useEffect(() => {
     if (result) {
       const data = result?.content ? (() => { try { return JSON.parse(result.content); } catch { return result; } })() : result;
       setModules(buildModulesFromGuide(data));
     }
-  }, [result]);
+  }, [result?.modules, result?.content]);
+
+  // Save lesson content and progress shortly after it changes.
+  const dirty = useRef(false);
+  const onSaveRef = useRef(onSave);
+  onSaveRef.current = onSave;
+  useEffect(() => {
+    if (!dirty.current) return;
+    const t = setTimeout(() => {
+      dirty.current = false;
+      onSaveRef.current(modules.map((m) => ({ ...m, lessons: m.lessons.map(({ generating, ...l }) => l) })));
+    }, 800);
+    return () => clearTimeout(t);
+  }, [modules]);
 
   const updateLessonState = useCallback((modIdx: number, lessonIdx: number, updates: Partial<Lesson>) => {
+    dirty.current = true;
     setModules((prev) =>
       prev.map((m, mi) => mi !== modIdx ? m : { ...m, lessons: m.lessons.map((l, li) => li !== lessonIdx ? l : { ...l, ...updates }) })
     );
@@ -820,6 +850,11 @@ function StudyGuideTab({ result, loading, onRun, jobTitle, jobDescription }: { r
     updateLessonState(activeLesson.mod, activeLesson.lesson, { completed: true });
   }, [activeLesson, updateLessonState]);
 
+  const handleQuizScored = useCallback((score: { correct: number; total: number }) => {
+    if (!activeLesson) return;
+    updateLessonState(activeLesson.mod, activeLesson.lesson, { quizScore: score });
+  }, [activeLesson, updateLessonState]);
+
   const confirmOpenNotebookLM = () => {
     navigator.clipboard.writeText(jobDescription || "");
     toast.success("Job requirements copied! Paste as a source in NotebookLM.");
@@ -857,6 +892,7 @@ function StudyGuideTab({ result, loading, onRun, jobTitle, jobDescription }: { r
           totalLessons={mod.lessons.length}
           onClose={() => setActiveLesson(null)}
           onComplete={() => { handleLessonComplete(); setActiveLesson(null); }}
+          onQuizScored={handleQuizScored}
         />
       );
     }
@@ -909,7 +945,7 @@ function StudyGuideTab({ result, loading, onRun, jobTitle, jobDescription }: { r
                   {hasContent && <span className="text-[0.6rem] text-green-600 font-medium">✦ Ready</span>}
                 </div>
                 <h4 className={`text-sm font-semibold ${lesson.completed ? "line-through opacity-60" : ""}`}>{lesson.title}</h4>
-                <p className="text-[0.667rem] text-gray-500 mt-1">{lesson.duration}</p>
+                <p className="text-[0.667rem] text-gray-500 mt-1">{lesson.duration}{lesson.quizScore ? ` · Score ${lesson.quizScore.correct}/${lesson.quizScore.total}` : ""}</p>
                 {lesson.generating && <span className="text-[0.667rem] text-[#028FA2] animate-pulse mt-1 block">Generating…</span>}
               </button>
             );
@@ -917,7 +953,7 @@ function StudyGuideTab({ result, loading, onRun, jobTitle, jobDescription }: { r
         </div>
         {completedCount < mod.lessons.length && (
           <button
-            onClick={() => { setModules((prev) => prev.map((m, i) => i !== openModuleIdx ? m : { ...m, lessons: m.lessons.map((l) => ({ ...l, completed: true })) })); }}
+            onClick={() => { dirty.current = true; setModules((prev) => prev.map((m, i) => i !== openModuleIdx ? m : { ...m, lessons: m.lessons.map((l) => ({ ...l, completed: true })) })); }}
             className="text-xs text-green-600 hover:text-green-700 font-medium"
           >
             ✓ Mark all complete
@@ -948,6 +984,29 @@ function StudyGuideTab({ result, loading, onRun, jobTitle, jobDescription }: { r
       <div className="w-full bg-gray-100 rounded-full h-2">
         <div className="bg-green-500 h-2 rounded-full transition-all" style={{ width: `${progress}%` }} />
       </div>
+
+      {/* Readiness */}
+      {(() => {
+        const r = studyReadiness(modules);
+        const label = r.tested === 0 ? "Not tested yet" : r.readiness >= 80 ? "Interview ready" : r.readiness >= 50 ? "Getting there" : "Keep practising";
+        const color = r.tested === 0 ? "#a1a1aa" : r.readiness >= 80 ? "#22c55e" : r.readiness >= 50 ? "#eab308" : "#ef4444";
+        return (
+          <div className="border border-white/10 rounded-xl p-4 flex items-center gap-4">
+            <div className="relative h-16 w-16 shrink-0">
+              <svg className="h-16 w-16 -rotate-90" viewBox="0 0 64 64" aria-hidden="true">
+                <circle cx="32" cy="32" r="27" fill="none" strokeWidth="6" style={{ stroke: "rgba(128,128,128,0.15)" }} />
+                <circle cx="32" cy="32" r="27" fill="none" strokeWidth="6" strokeLinecap="round" style={{ stroke: color }} strokeDasharray={`${(r.readiness / 100) * 169.6} 169.6`} />
+              </svg>
+              <span className="absolute inset-0 flex items-center justify-center text-sm font-bold text-white">{r.readiness}%</span>
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-white">Readiness: <span style={{ color }}>{label}</span></p>
+              <p className="text-xs text-[#888] mt-0.5">{r.accuracy}% of answers correct across {r.tested} of {r.lessons} lessons tested.</p>
+              <p className="text-[0.667rem] text-[#555] mt-0.5">Every lesson ends with graded questions. Readiness is your accuracy weighted by how much of the guide you have been tested on.</p>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Generate All button */}
       {!trainingGenerated && modules.length > 0 && (
@@ -1047,31 +1106,68 @@ function StudyGuideTab({ result, loading, onRun, jobTitle, jobDescription }: { r
 }
 
 // ─── Lesson Player (inline) ──────────────────────────────────────────────────
-function LessonPlayerInline({ lesson, moduleTitle, lessonIndex, totalLessons, onClose, onComplete }: {
-  lesson: Lesson; moduleTitle: string; lessonIndex: number; totalLessons: number; onClose: () => void; onComplete: () => void;
+// Splits text into cards of at most two sentences so the learner reads one small idea at a time.
+function toCards(sections: { heading: string; body: string; codeSnippet?: string }[]) {
+  const cards: { heading: string; text: string; codeSnippet?: string }[] = [];
+  for (const sec of sections) {
+    const sentences = (sec.body || "").replace(/\s+/g, " ").trim().split(/(?<=[.!?])\s+(?=[A-Z0-9"'(])/).filter(Boolean);
+    const chunks: string[] = [];
+    for (let i = 0; i < sentences.length; i += 2) chunks.push(sentences.slice(i, i + 2).join(" "));
+    if (chunks.length === 0) continue;
+    chunks.forEach((text, ci) => cards.push({ heading: sec.heading, text, codeSnippet: ci === chunks.length - 1 ? sec.codeSnippet : undefined }));
+  }
+  return cards;
+}
+
+const canSpeak = typeof window !== "undefined" && "speechSynthesis" in window;
+
+function LessonPlayerInline({ lesson, moduleTitle, lessonIndex, totalLessons, onClose, onComplete, onQuizScored }: {
+  lesson: Lesson; moduleTitle: string; lessonIndex: number; totalLessons: number; onClose: () => void; onComplete: () => void; onQuizScored: (score: { correct: number; total: number }) => void;
 }) {
   const [currentStep, setCurrentStep] = useState(0);
   const [quizAnswers, setQuizAnswers] = useState<Record<number, number>>({});
   const [quizSubmitted, setQuizSubmitted] = useState(false);
+  const [speaking, setSpeaking] = useState(false);
+  const [autoPlay, setAutoPlay] = useState(false);
 
-  const sections = lesson.sections || [];
+  const cards = toCards(lesson.sections || []);
   const quiz = lesson.quiz || [];
-  const hasPractice = !!lesson.practicePrompt;
   const hasQuiz = quiz.length > 0;
-  const totalSteps = sections.length + (hasPractice ? 1 : 0) + (hasQuiz ? 1 : 0) + 1;
-  const isOnSection = currentStep < sections.length;
-  const practiceStepIdx = sections.length;
-  const quizStepIdx = sections.length + (hasPractice ? 1 : 0);
+  const quizStepIdx = cards.length;
+  const totalSteps = cards.length + (hasQuiz ? 1 : 0) + 1;
   const summaryStepIdx = totalSteps - 1;
-  const isOnPractice = hasPractice && currentStep === practiceStepIdx;
+  const isOnCard = currentStep < cards.length;
   const isOnQuiz = hasQuiz && currentStep === quizStepIdx;
   const isOnSummary = currentStep === summaryStepIdx;
+  const card = cards[currentStep];
+  const quizCorrect = Object.entries(quizAnswers).filter(([qi, ai]) => quiz[Number(qi)]?.correctIndex === ai).length;
+
+  const stopSpeaking = () => { if (canSpeak) window.speechSynthesis.cancel(); setSpeaking(false); };
+  const speak = (text: string, onEnd?: () => void) => {
+    if (!canSpeak) return;
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.rate = 1;
+    u.onend = () => { setSpeaking(false); onEnd?.(); };
+    u.onerror = () => setSpeaking(false);
+    setSpeaking(true);
+    window.speechSynthesis.speak(u);
+  };
+
+  // Auto-play reads each card and moves on until the questions.
+  useEffect(() => {
+    if (!autoPlay || !isOnCard || !card) return;
+    speak(card.text, () => setCurrentStep((p) => (p < cards.length - 1 ? p + 1 : p)));
+  }, [currentStep, autoPlay]);
+  useEffect(() => () => { if (canSpeak) window.speechSynthesis.cancel(); }, []);
+
+  const go = (step: number) => { if (!autoPlay) stopSpeaking(); setCurrentStep(step); };
 
   return (
     <div className="space-y-4">
       {/* Top bar */}
       <div className="flex items-center justify-between">
-        <button onClick={onClose} className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700">
+        <button onClick={() => { stopSpeaking(); onClose(); }} className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700">
           <ArrowLeft className="h-3.5 w-3.5" /> Back to module
         </button>
         <div className="text-center">
@@ -1084,64 +1180,51 @@ function LessonPlayerInline({ lesson, moduleTitle, lessonIndex, totalLessons, on
       {/* Step progress bar */}
       <div className="flex items-center gap-1">
         {Array.from({ length: totalSteps }).map((_, i) => (
-          <button key={i} onClick={() => setCurrentStep(i)} className={`h-2 flex-1 rounded-full transition-all cursor-pointer ${i < currentStep ? "bg-[#028FA2]" : i === currentStep ? "bg-[#028FA2] scale-y-125 shadow" : "bg-gray-200"}`} />
+          <button key={i} onClick={() => go(i)} aria-label={`Go to step ${i + 1}`} className={`h-2 flex-1 rounded-full transition-all cursor-pointer ${i < currentStep ? "bg-[#028FA2]" : i === currentStep ? "bg-[#028FA2] scale-y-125 shadow" : "bg-gray-200"}`} />
         ))}
       </div>
       <p className="text-[0.667rem] text-gray-400">Step {currentStep + 1} of {totalSteps} · {Math.round(((currentStep + 1) / totalSteps) * 100)}%</p>
 
       {/* Content */}
-      <div className="min-h-[300px]">
-        {isOnSection && sections[currentStep] && (
-          <div className="space-y-4 animate-fade-in">
-            <div className="bg-[#028FA2]/[0.06] p-4 rounded-xl border-l-4 border-[#028FA2]">
-              <p className="text-[0.667rem] uppercase tracking-wider text-[#028FA2] font-bold">Scene {currentStep + 1} of {sections.length}</p>
-              <h4 className="text-lg font-bold text-white mt-1">{sections[currentStep].heading}</h4>
+      <div className="min-h-[260px]">
+        {isOnCard && card && (
+          <div key={currentStep} className="space-y-4 animate-fade-in">
+            <p className="text-[0.667rem] uppercase tracking-wider text-[#028FA2] font-bold">{card.heading}</p>
+            <div className="p-6 rounded-xl border border-white/10 bg-white/[0.02] min-h-[140px] flex items-center">
+              <p className="text-lg text-white leading-relaxed">{card.text}</p>
             </div>
-            {sections[currentStep].body.split("\n\n").map((p, pi) => (
-              <p key={pi} className="text-sm text-gray-700 leading-relaxed">{p}</p>
-            ))}
-            {sections[currentStep].codeSnippet && (
+            {card.codeSnippet && (
               <div className="rounded-xl bg-gray-900 overflow-hidden">
                 <div className="flex items-center justify-between px-4 py-2 bg-gray-800">
                   <span className="text-[0.667rem] text-gray-400 font-mono uppercase">Code Example</span>
-                  <button onClick={() => { navigator.clipboard.writeText(sections[currentStep].codeSnippet || ""); toast.success("Copied!"); }} className="text-[0.667rem] text-[#028FA2]/70 hover:text-[#028FA2]/70 font-bold">Copy</button>
+                  <button onClick={() => { navigator.clipboard.writeText(card.codeSnippet || ""); toast.success("Copied!"); }} className="text-[0.667rem] text-[#028FA2] font-bold">Copy</button>
                 </div>
-                <pre className="p-4 text-xs font-mono text-gray-200 whitespace-pre-wrap overflow-x-auto">{sections[currentStep].codeSnippet}</pre>
+                <pre className="p-4 text-xs font-mono text-gray-200 whitespace-pre-wrap overflow-x-auto">{card.codeSnippet}</pre>
               </div>
             )}
-            {lesson.keyPoints?.[currentStep] && (
-              <div className="p-3 bg-[#028FA2]/10 border border-[#028FA2]/20 rounded-lg flex items-start gap-2">
-                <Sparkles className="h-4 w-4 text-[#028FA2] mt-0.5 shrink-0" />
-                <p className="text-xs text-white font-medium">{lesson.keyPoints[currentStep]}</p>
+            {canSpeak && (
+              <div className="flex items-center gap-3">
+                <button onClick={() => (speaking ? stopSpeaking() : speak(card.text))} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-[#028FA2]/40 text-[#028FA2] hover:bg-[#028FA2]/10">
+                  {speaking ? <><VolumeX className="h-3.5 w-3.5" /> Stop</> : <><Volume2 className="h-3.5 w-3.5" /> Listen</>}
+                </button>
+                <label className="flex items-center gap-1.5 text-xs text-[#888] cursor-pointer">
+                  <input type="checkbox" checked={autoPlay} onChange={(e) => { setAutoPlay(e.target.checked); if (!e.target.checked) stopSpeaking(); }} className="accent-[#028FA2]" />
+                  Auto-play cards
+                </label>
               </div>
             )}
-          </div>
-        )}
-
-        {isOnPractice && (
-          <div className="space-y-4 animate-fade-in">
-            <div className="bg-purple-500/[0.06] p-4 rounded-xl border-l-4 border-purple-400">
-              <p className="text-[0.667rem] uppercase tracking-wider text-purple-400 font-bold">Hands-On</p>
-              <h4 className="text-lg font-bold text-white mt-1">Practice Exercise</h4>
-            </div>
-            <div className="p-4 bg-purple-500/[0.06] border border-purple-500/20 rounded-xl">
-              {lesson.practicePrompt?.split("\n\n").map((p, pi) => (
-                <p key={pi} className="text-sm text-gray-700 leading-relaxed">{p}</p>
-              ))}
-            </div>
-            <p className="text-xs text-gray-500">💡 Complete this exercise, then continue to validate with the quiz.</p>
           </div>
         )}
 
         {isOnQuiz && (
           <div className="space-y-4 animate-fade-in">
             <div className="bg-amber-500/[0.06] p-4 rounded-xl border-l-4 border-amber-400">
-              <p className="text-[0.667rem] uppercase tracking-wider text-amber-400 font-bold">Knowledge Check</p>
-              <h4 className="text-lg font-bold text-white mt-1">Quiz</h4>
+              <p className="text-[0.667rem] uppercase tracking-wider text-amber-400 font-bold">{lesson.type === "practice" ? "Scenario practice" : "Knowledge check"}</p>
+              <h4 className="text-lg font-bold text-white mt-1">{quiz.length} graded {quiz.length === 1 ? "question" : "questions"}</h4>
             </div>
             {quiz.map((q, qi) => (
               <div key={qi} className="space-y-2 border border-white/10 rounded-xl p-4">
-                <p className="text-sm font-semibold text-gray-800">{qi + 1}. {q.question}</p>
+                <p className="text-sm font-semibold text-white">{qi + 1}. {q.question}</p>
                 <div className="space-y-1.5">
                   {q.options.map((opt, oi) => {
                     const selected = quizAnswers[qi] === oi;
@@ -1160,16 +1243,17 @@ function LessonPlayerInline({ lesson, moduleTitle, lessonIndex, totalLessons, on
                     );
                   })}
                 </div>
+                {quizSubmitted && q.explanation && <p className="text-xs text-[#888]">{q.explanation}</p>}
               </div>
             ))}
-            {!quizSubmitted && quiz.length > 0 && (
-              <button onClick={() => setQuizSubmitted(true)} disabled={Object.keys(quizAnswers).length < quiz.length} className="w-full py-2.5 text-xs font-medium rounded-xl bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-40 transition-colors">
-                Check Answers
+            {!quizSubmitted && (
+              <button onClick={() => { setQuizSubmitted(true); onQuizScored({ correct: quizCorrect, total: quiz.length }); }} disabled={Object.keys(quizAnswers).length < quiz.length} className="w-full py-2.5 text-xs font-medium rounded-xl bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-50">
+                Check answers
               </button>
             )}
             {quizSubmitted && (
               <div className="p-3 bg-[#028FA2]/10 border border-[#028FA2]/20 rounded-lg text-center">
-                <p className="text-sm font-bold">{Object.entries(quizAnswers).filter(([qi, ai]) => quiz[Number(qi)]?.correctIndex === ai).length}/{quiz.length} correct</p>
+                <p className="text-sm font-bold text-white">{quizCorrect}/{quiz.length} correct</p>
               </div>
             )}
           </div>
@@ -1180,8 +1264,8 @@ function LessonPlayerInline({ lesson, moduleTitle, lessonIndex, totalLessons, on
             <div className="flex h-14 w-14 mx-auto items-center justify-center rounded-lg bg-green-100">
               <Check className="h-7 w-7 text-green-600" />
             </div>
-            <h3 className="text-xl font-bold text-white">Lesson Complete!</h3>
-            <p className="text-sm text-gray-500">You've covered all {sections.length} scenes in "{lesson.title}".</p>
+            <h3 className="text-xl font-bold text-white">Lesson complete</h3>
+            <p className="text-sm text-gray-500">{cards.length} cards{hasQuiz ? (quizSubmitted ? ` · ${quizCorrect}/${quiz.length} correct` : " · questions not answered yet") : ""}</p>
             {lesson.keyPoints && lesson.keyPoints.length > 0 && (
               <div className="text-left space-y-2 max-w-md mx-auto">
                 <h5 className="text-xs font-bold text-gray-500 uppercase">Key Takeaways</h5>
@@ -1199,15 +1283,15 @@ function LessonPlayerInline({ lesson, moduleTitle, lessonIndex, totalLessons, on
 
       {/* Navigation */}
       <div className="flex items-center justify-between pt-3 border-t border-white/10">
-        <button onClick={() => setCurrentStep((p) => Math.max(0, p - 1))} disabled={currentStep === 0} className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-gray-600 hover:text-gray-800 disabled:opacity-30">
+        <button onClick={() => go(Math.max(0, currentStep - 1))} disabled={currentStep === 0} className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-gray-600 hover:text-gray-800 disabled:opacity-30">
           <ArrowLeft className="h-3 w-3" /> Previous
         </button>
         {currentStep === summaryStepIdx ? (
-          <button onClick={onComplete} className="px-4 py-2 text-xs font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 flex items-center gap-1.5">
+          <button onClick={() => { stopSpeaking(); onComplete(); }} className="px-4 py-2 text-xs font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 flex items-center gap-1.5">
             <Check className="h-3.5 w-3.5" /> Complete Lesson
           </button>
         ) : (
-          <button onClick={() => setCurrentStep((p) => Math.min(totalSteps - 1, p + 1))} className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-white bg-[#028FA2] rounded-lg hover:bg-[#027a8c]">
+          <button onClick={() => go(Math.min(totalSteps - 1, currentStep + 1))} className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-white bg-[#028FA2] rounded-lg hover:bg-[#027a8c]">
             Next <ArrowRight className="h-3 w-3" />
           </button>
         )}
