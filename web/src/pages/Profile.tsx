@@ -103,7 +103,7 @@ export default function Profile() {
       {/* Header */}
       <div className="mb-6">
         <h1 className="text-lg font-semibold text-white">Profile</h1>
-        <p className="text-sm text-[#666] mt-0.5">Personal info, base resume, and job search preferences — stored locally.</p>
+        <p className="text-sm text-[#666] mt-0.5">Personal info, base resume, and job search preferences, stored locally.</p>
       </div>
 
       {/* Import from resume banner */}

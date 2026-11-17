@@ -1,4 +1,4 @@
-"""JobSpy microservice — scrapes real job listings from multiple boards."""
+"""JobSpy microservice - scrapes real job listings from multiple boards."""
 import os
 import json
 import hashlib

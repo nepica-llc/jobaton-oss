@@ -18,7 +18,7 @@ env:
   IMAGE_NAME: nepica/jobaton
 
 jobs:
-  # ── Build (runs on every push/PR — verify only) ───────────────────────────
+  # ── Build (runs on every push/PR - verify only) ───────────────────────────
   build:
     runs-on: ubuntu-latest
     steps:
@@ -28,7 +28,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build (verify only — no push)
+      - name: Build (verify only - no push)
         uses: docker/build-push-action@v6
         with:
           context: .

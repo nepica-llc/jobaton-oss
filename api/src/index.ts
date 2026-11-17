@@ -135,8 +135,12 @@ app.delete("/api/jobs/:id", (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// AI helper — resolve API key + provider from settings
+// AI helper - resolve API key + provider from settings
 // ---------------------------------------------------------------------------
+// The UI never shows em dashes, so strip them from AI output too.
+const DASH = String.fromCharCode(0x2014);
+const noDash = (s: string) => s.split(` ${DASH} `).join(", ").split(DASH).join("-");
+
 function getAIClient(bodyKey?: string): { client: OpenAI; model: string } | null {
   const settings = getSettings();
   const provider = settings.active_provider || "openai";
@@ -187,7 +191,7 @@ app.post("/api/ai/chat", async (req, res) => {
       temperature: temperature ?? 0.7,
       max_tokens: max_tokens || 4096,
     });
-    const content = completion.choices[0]?.message?.content || "";
+    const content = noDash(completion.choices[0]?.message?.content || "");
     res.json({
       ok: true,
       data: { content },
@@ -223,7 +227,7 @@ Be specific and realistic. Use current market trends. Vary the companies and rol
       temperature: 0.8,
       max_tokens: 2000,
     });
-    const raw = completion.choices[0]?.message?.content || "[]";
+    const raw = noDash(completion.choices[0]?.message?.content || "[]");
     const parsed = JSON.parse(raw.replace(/```json?\n?/g, "").replace(/```/g, "").trim());
     res.json({ ok: true, data: parsed, usage: completion.usage });
   } catch (err: any) {
@@ -297,7 +301,7 @@ If a field is not found, use an empty string or empty array. Never add commentar
       temperature: 0.2,
       max_tokens: 1024,
     });
-    const raw = completion.choices[0]?.message?.content || "{}";
+    const raw = noDash(completion.choices[0]?.message?.content || "{}");
     const parsed = JSON.parse(raw.replace(/```json?\n?/g, "").replace(/```/g, "").trim());
     res.json({ ok: true, data: parsed, usage: completion.usage });
   } catch (err: any) {
@@ -354,7 +358,7 @@ CRITICAL RULES:
 - "lines" format is for simple text sections (summary, skills, certifications, header)
 - Bullet points should be achievement-focused with metrics where possible
 - Tailor content to match the job description keywords and requirements
-- Include ALL jobs/education from original resume — do not remove any
+- Include ALL jobs/education from original resume - do not remove any
 - The "tailored_resume" field should still contain the full plain-text version as backup`
         },
         { role: "user", content: `RESUME:\n${resumeText}\n\nJOB DESCRIPTION:\n${jobDescription}` }
@@ -363,7 +367,7 @@ CRITICAL RULES:
       max_tokens: 6000,
       response_format: { type: "json_object" },
     });
-    const raw = completion.choices[0]?.message?.content || "{}";
+    const raw = noDash(completion.choices[0]?.message?.content || "{}");
     const parsed = JSON.parse(raw.replace(/```json?\n?/g, "").replace(/```/g, "").trim());
     res.json({ ok: true, data: parsed, usage: completion.usage });
   } catch (err: any) {
@@ -392,7 +396,7 @@ app.post("/api/ai/cover-letter", async (req, res) => {
       temperature: 0.7,
       max_tokens: 2048,
     });
-    res.json({ ok: true, data: { coverLetter: completion.choices[0]?.message?.content || "" }, usage: completion.usage });
+    res.json({ ok: true, data: { coverLetter: noDash(completion.choices[0]?.message?.content || "") }, usage: completion.usage });
   } catch (err: any) {
     console.error("[ai/cover-letter]", err.message);
     res.status(500).json({ ok: false, error: err.message });
@@ -434,7 +438,7 @@ Output as JSON with this EXACT structure:
 }
 
 RULES:
-- Be thorough and specific in feedback — generic advice is useless
+- Be thorough and specific in feedback - generic advice is useless
 - Each section score should be 0-100
 - skillGaps must list skills from the JD that are missing or underrepresented in the resume
 - suggestions should be specific and actionable (e.g. "Add 'Kubernetes' to your skills section and mention container orchestration in your AWS experience bullet")
@@ -451,7 +455,7 @@ RULES:
       max_tokens: 4096,
       response_format: { type: "json_object" },
     });
-    const content = completion.choices[0]?.message?.content || "{}";
+    const content = noDash(completion.choices[0]?.message?.content || "{}");
     res.json({ ok: true, data: JSON.parse(content), usage: completion.usage });
   } catch (err: any) {
     console.error("[ai/ats-score]", err.message);
@@ -509,7 +513,7 @@ Make modules progressively build on each other. Include a mix of conceptual lear
       max_tokens: 4096,
       response_format: { type: "json_object" },
     });
-    const content = completion.choices[0]?.message?.content || "{}";
+    const content = noDash(completion.choices[0]?.message?.content || "{}");
     res.json({ ok: true, data: JSON.parse(content), usage: completion.usage });
   } catch (err: any) {
     console.error("[ai/study-guide]", err.message);
@@ -572,7 +576,7 @@ Output as JSON:
       max_tokens: 3000,
       response_format: { type: "json_object" },
     });
-    const content = completion.choices[0]?.message?.content || "{}";
+    const content = noDash(completion.choices[0]?.message?.content || "{}");
     res.json({ ok: true, data: JSON.parse(content), usage: completion.usage });
   } catch (err: any) {
     console.error("[ai/study-content]", err.message);
@@ -600,14 +604,14 @@ CRITICAL REQUIREMENTS:
 - Include a detailed practicePrompt with clear step-by-step instructions (at least 3-4 sentences).
 - If the lesson type is "quiz", include 8-10 MCQ questions covering different difficulty levels (easy, medium, hard).
 - Make content practical and directly relevant to interview scenarios.
-- Each section body should teach a concept thoroughly — imagine you're writing a textbook section, not a bullet point.
+- Each section body should teach a concept thoroughly - imagine you're writing a textbook section, not a bullet point.
 - Include real-world analogies, best practices, common pitfalls, and interview tips in the body text.
 
 Return ONLY valid JSON:
 {
   "title": "exact lesson title",
   "sections": [
-    {"heading": "Section heading", "body": "Thorough multi-paragraph explanation. Minimum 4-6 sentences with real depth. Include examples, best practices, and common pitfalls.", "codeSnippet": "optional but encouraged — include practical code examples"}
+    {"heading": "Section heading", "body": "Thorough multi-paragraph explanation. Minimum 4-6 sentences with real depth. Include examples, best practices, and common pitfalls.", "codeSnippet": "optional but encouraged - include practical code examples"}
   ],
   "keyPoints": ["Key takeaway 1", "Key takeaway 2", "...at least 5"],
   "practicePrompt": "A detailed hands-on exercise with clear steps (empty string if quiz lesson)",
@@ -618,7 +622,7 @@ Rules:
 - If lesson type is "quiz", fill the quiz array with 8-10 questions and leave practicePrompt empty
 - Otherwise fill practicePrompt and leave quiz as empty array
 - NEVER produce fewer than 5 sections
-- NEVER produce shallow one-sentence section bodies — each must be substantive
+- NEVER produce shallow one-sentence section bodies - each must be substantive
 - Return ONLY valid JSON, no markdown, no commentary`;
 
     const userPrompt = `SKILL: ${skill}\nJOB TITLE: ${jobTitle}\nCOMPANY: ${company || "Company"}\nLESSON TYPE: ${lessonType}\n\nGENERATE THIS LESSON:\n${lessonTitle}\n\nALL LESSONS IN MODULE:\n${(allLessonTitles || []).map((t: string, i: number) => `${i + 1}. ${t}`).join("\n")}`;
@@ -633,7 +637,7 @@ Rules:
       max_tokens: 6000,
       response_format: { type: "json_object" },
     });
-    const content = completion.choices[0]?.message?.content || "{}";
+    const content = noDash(completion.choices[0]?.message?.content || "{}");
     const parsed = JSON.parse(content);
     const lesson = parsed.lessons?.[0] || parsed.lesson || parsed;
     res.json({ ok: true, data: { lesson }, usage: completion.usage });
@@ -707,7 +711,7 @@ CRITICAL RULES:
       max_tokens: 8000,
       response_format: { type: "json_object" },
     });
-    const content = completion.choices[0]?.message?.content || "{}";
+    const content = noDash(completion.choices[0]?.message?.content || "{}");
     res.json({ ok: true, data: JSON.parse(content), usage: completion.usage });
   } catch (err: any) {
     console.error("[ai/interview-prep]", err.message);
@@ -734,7 +738,7 @@ Keep responses concise (2-3 paragraphs max).`;
 
     const messages: any[] = [
       { role: "system", content: systemPrompt },
-      { role: "user", content: `Context — Resume: ${resumeText}\nJob Description: ${jobDescription}` },
+      { role: "user", content: `Context - Resume: ${resumeText}\nJob Description: ${jobDescription}` },
       ...(chatHistory || []),
     ];
 
@@ -744,7 +748,7 @@ Keep responses concise (2-3 paragraphs max).`;
       temperature: 0.7,
       max_tokens: 1024,
     });
-    res.json({ ok: true, data: { content: completion.choices[0]?.message?.content || "" }, usage: completion.usage });
+    res.json({ ok: true, data: { content: noDash(completion.choices[0]?.message?.content || "") }, usage: completion.usage });
   } catch (err: any) {
     console.error("[ai/mock-interview]", err.message);
     res.status(500).json({ ok: false, error: err.message });

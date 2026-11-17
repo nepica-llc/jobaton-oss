@@ -48,18 +48,18 @@ const emptyResume: ResumeData = {
 };
 
 const MOTIVATIONAL_QUOTES = [
-  "The future belongs to those who believe in the beauty of their dreams. — Eleanor Roosevelt",
-  "Success is not final, failure is not fatal: it is the courage to continue that counts. — Winston Churchill",
-  "Your time is limited, don't waste it living someone else's life. — Steve Jobs",
-  "The only way to do great work is to love what you do. — Steve Jobs",
-  "Believe you can and you're halfway there. — Theodore Roosevelt",
-  "It always seems impossible until it's done. — Nelson Mandela",
-  "The best way to predict the future is to create it. — Peter Drucker",
-  "Don't watch the clock; do what it does. Keep going. — Sam Levenson",
-  "Opportunities don't happen. You create them. — Chris Grosser",
+  "The future belongs to those who believe in the beauty of their dreams. - Eleanor Roosevelt",
+  "Success is not final, failure is not fatal: it is the courage to continue that counts. - Winston Churchill",
+  "Your time is limited, don't waste it living someone else's life. - Steve Jobs",
+  "The only way to do great work is to love what you do. - Steve Jobs",
+  "Believe you can and you're halfway there. - Theodore Roosevelt",
+  "It always seems impossible until it's done. - Nelson Mandela",
+  "The best way to predict the future is to create it. - Peter Drucker",
+  "Don't watch the clock; do what it does. Keep going. - Sam Levenson",
+  "Opportunities don't happen. You create them. - Chris Grosser",
   "The harder you work for something, the greater you'll feel when you achieve it.",
-  "Dream big. Start small. Act now. — Robin Sharma",
-  "Every expert was once a beginner. — Helen Hayes",
+  "Dream big. Start small. Act now. - Robin Sharma",
+  "Every expert was once a beginner. - Helen Hayes",
 ];
 
 function getRandomQuote() {
@@ -133,7 +133,7 @@ export default function Resume() {
   "awards": ["award or honor"]
 }
 Rules:
-- Extract ALL sections from the resume — do not skip certifications, projects, languages, volunteer work, publications, awards, or any other section
+- Extract ALL sections from the resume - do not skip certifications, projects, languages, volunteer work, publications, awards, or any other section
 - If a field is not found, use empty string or empty array
 - For skills, split into individual items (not comma-separated strings)
 - For education, capture field of study, GPA, and honors separately
@@ -292,7 +292,7 @@ Rules:
       if (t.includes("manager") || t.includes("lead")) return "Management";
       return "Engineering";
     }
-    return "—";
+    return "-";
   };
 
   // --- List view (no active resume) ---
@@ -303,7 +303,7 @@ Rules:
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-lg font-semibold text-white">Base Resumes</h1>
-            <p className="text-sm text-[#666] mt-0.5">Master copies — each job gets a tailored version from these.</p>
+            <p className="text-sm text-[#666] mt-0.5">Master copies. Each job gets a tailored version from these.</p>
           </div>
           <div className="flex items-center gap-2">
             <div className="flex items-center border border-white/[0.06] rounded-md p-0.5">
@@ -383,7 +383,7 @@ Rules:
                           <span className="text-sm font-semibold text-white truncate max-w-[200px] group-hover:text-[#028FA2] transition-colors">{r.name || "Untitled"}</span>
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-xs text-[#888] font-medium">{r.fullName || "—"}</td>
+                      <td className="px-4 py-3 text-xs text-[#888] font-medium">{r.fullName || "-"}</td>
                       <td className="px-4 py-3"><span className="px-2 py-0.5 bg-[#028FA2]/10 text-[#028FA2] text-[10px] rounded-full font-medium">{getDomain(r)}</span></td>
                       <td className="px-4 py-3 text-xs text-[#555]">{r.experience?.length || 0} positions</td>
                       <td className="px-4 py-3 text-xs text-[#555]">{r.skills?.length || 0}</td>
@@ -419,7 +419,7 @@ Rules:
                   style={{ width: `${uploadProgress.percent}%` }}
                 />
               </div>
-              <p className="text-xs text-[#555] mt-2">{uploadProgress.percent}% — Please wait, do not navigate away</p>
+              <p className="text-xs text-[#555] mt-2">{uploadProgress.percent}%. Please wait, do not navigate away</p>
               <p className="text-xs text-[#888] italic mt-4 px-4 leading-relaxed">"{getRandomQuote()}"</p>
             </div>
           </div>
@@ -732,7 +732,7 @@ Rules:
               <div className={`mb-2 transition-all cursor-pointer ${activeSection === "education" ? "ring-2 ring-[#028FA2]/30 rounded-lg p-1.5 -mx-1.5" : ""}`} onClick={() => setActiveSection("education")}>
                 <p className="font-bold uppercase text-[8px] text-[#555] mb-0.5">Education</p>
                 {(active.education || []).map((edu, i) => (
-                  <p key={i} className="text-white"><span className="font-semibold">{edu.degree}</span> {edu.field && `in ${edu.field}`} — {edu.school} {edu.year && `(${edu.year})`}</p>
+                  <p key={i} className="text-white"><span className="font-semibold">{edu.degree}</span> {edu.field && `in ${edu.field}`}, {edu.school} {edu.year && `(${edu.year})`}</p>
                 ))}
               </div>
             )}
@@ -749,7 +749,7 @@ Rules:
             {(active.certifications || []).length > 0 && (
               <div className={`mb-2 transition-all cursor-pointer ${activeSection === "certifications" ? "ring-2 ring-[#028FA2]/30 rounded-lg p-1.5 -mx-1.5" : ""}`} onClick={() => setActiveSection("certifications")}>
                 <p className="font-bold uppercase text-[8px] text-[#555] mb-0.5">Certifications</p>
-                {(active.certifications || []).map((c, i) => <p key={i} className="text-[#888]">{c.name} — {c.issuer} ({c.year})</p>)}
+                {(active.certifications || []).map((c, i) => <p key={i} className="text-[#888]">{c.name}, {c.issuer} ({c.year})</p>)}
               </div>
             )}
 

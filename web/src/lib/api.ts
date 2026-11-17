@@ -71,7 +71,7 @@ export const api = {
   chat: (messages: any[], model?: string) =>
     request("/ai/chat", { method: "POST", body: JSON.stringify({ messages, model }) }),
 
-  // JobSpy — real job scraping
+  // JobSpy - real job scraping
   jobspySearch: async (searchTerm: string, location?: string, resultsWanted?: number, forceRefresh?: boolean) => {
     const params = new URLSearchParams({ search_term: searchTerm });
     if (location) params.set("location", location);
