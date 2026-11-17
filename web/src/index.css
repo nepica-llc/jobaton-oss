@@ -61,7 +61,7 @@ body {
 :root.light .th-border { border-color: var(--c-border); }
 
 /* ═══════════════════════════════════════════════════════
-   DARK THEME — Neon accent, no solid fills
+   DARK THEME - Neon accent, no solid fills
    ═══════════════════════════════════════════════════════ */
 :root.dark body { background: #09090b; color: #e5e5e5; }
 
@@ -72,7 +72,7 @@ body {
 :root.dark .glass-header { background: #09090b; border-bottom: 1px solid rgba(255,255,255,0.06); }
 :root.dark .glass-footer { background: #09090b; border-top: 1px solid rgba(255,255,255,0.06); }
 
-/* Neon buttons — outlined with glow, never solid fill */
+/* Neon buttons - outlined with glow, never solid fill */
 :root.dark .glass-btn {
   background: transparent;
   border: 1px solid rgba(255,255,255,0.1);

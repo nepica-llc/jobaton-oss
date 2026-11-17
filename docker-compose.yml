@@ -1,4 +1,4 @@
-# Jobaton OSS — Single container deployment
+# Jobaton OSS - Single container deployment
 #
 # Usage:
 #   docker compose up --build        # build & start

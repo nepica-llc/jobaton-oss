@@ -50,7 +50,7 @@ export default function Dashboard() {
     {
       done: stats.resumes > 0,
       title: "Upload your resume",
-      desc: "Start by uploading a PDF — AI will parse and structure it automatically.",
+      desc: "Start by uploading a PDF. AI will parse and structure it automatically.",
       action: "/resume",
       actionLabel: "Go to Resumes",
       icon: Upload,
@@ -83,7 +83,7 @@ export default function Dashboard() {
         <p className="text-sm text-[#666] mt-0.5">Your self-hosted AI career toolkit overview.</p>
       </div>
 
-      {/* Getting Started — dismissible */}
+      {/* Getting Started - dismissible */}
       {!gettingStartedDismissed && (
         <>
           <div className="glass-card p-4 mb-4">
@@ -145,12 +145,12 @@ export default function Dashboard() {
               <p className="text-xs text-[#666] mt-1">Jobs tracked</p>
             </Link>
             <Link to="/profile" className="glass-card p-5 group transition-all border-l-2 border-l-green-500/50">
-              <p className={`text-2xl font-semibold ${stats.profileComplete ? "text-green-400" : "text-[#666]"}`}>{stats.profileComplete ? "✓" : "—"}</p>
+              <p className={`text-2xl font-semibold ${stats.profileComplete ? "text-green-400" : "text-[#666]"}`}>{stats.profileComplete ? "✓" : "-"}</p>
               <p className="text-xs text-[#666] mt-1">{stats.profileComplete ? "Profile complete" : "Incomplete"}</p>
             </Link>
           </div>
 
-          {/* Pipeline — circles */}
+          {/* Pipeline - circles */}
           {stats.jobs > 0 && (
             <div className="glass-card p-5">
               <h3 className="text-[13px] font-medium text-white mb-4">Pipeline</h3>
@@ -206,7 +206,7 @@ export default function Dashboard() {
             </div>
           )}
 
-          {/* Quick actions — compact */}
+          {/* Quick actions - compact */}
           {stats.jobs > 0 && (
             <Link to="/jobs" className="inline-flex items-center gap-2 px-4 py-2 glass-card group transition-all">
               <TrendingUp className="h-3.5 w-3.5 text-[#028FA2] shrink-0" />

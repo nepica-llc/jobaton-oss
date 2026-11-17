@@ -120,5 +120,5 @@ export function getJobsByStatus(status?: string): any[] {
 }
 
 export function writeCollection<T = unknown>(_table: string, _data: T[]): void {
-  // Legacy compat — no-op
+  // Legacy compat - no-op
 }

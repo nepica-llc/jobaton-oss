@@ -5,18 +5,18 @@ import { toast } from "sonner";
 import { api } from "@/lib/api";
 
 const MOTIVATIONAL_QUOTES = [
-  "The future belongs to those who believe in the beauty of their dreams. — Eleanor Roosevelt",
-  "Success is not final, failure is not fatal: it is the courage to continue that counts. — Winston Churchill",
-  "Your time is limited, don't waste it living someone else's life. — Steve Jobs",
-  "The only way to do great work is to love what you do. — Steve Jobs",
-  "Believe you can and you're halfway there. — Theodore Roosevelt",
-  "It always seems impossible until it's done. — Nelson Mandela",
-  "The best way to predict the future is to create it. — Peter Drucker",
-  "Don't watch the clock; do what it does. Keep going. — Sam Levenson",
-  "Opportunities don't happen. You create them. — Chris Grosser",
+  "The future belongs to those who believe in the beauty of their dreams. - Eleanor Roosevelt",
+  "Success is not final, failure is not fatal: it is the courage to continue that counts. - Winston Churchill",
+  "Your time is limited, don't waste it living someone else's life. - Steve Jobs",
+  "The only way to do great work is to love what you do. - Steve Jobs",
+  "Believe you can and you're halfway there. - Theodore Roosevelt",
+  "It always seems impossible until it's done. - Nelson Mandela",
+  "The best way to predict the future is to create it. - Peter Drucker",
+  "Don't watch the clock; do what it does. Keep going. - Sam Levenson",
+  "Opportunities don't happen. You create them. - Chris Grosser",
   "The harder you work for something, the greater you'll feel when you achieve it.",
-  "Dream big. Start small. Act now. — Robin Sharma",
-  "Every expert was once a beginner. — Helen Hayes",
+  "Dream big. Start small. Act now. - Robin Sharma",
+  "Every expert was once a beginner. - Helen Hayes",
 ];
 
 function getRandomQuote() {
@@ -698,7 +698,7 @@ function CoverLetterTab({ result, loading, onRun }: { result: string; loading: b
   );
 }
 
-// ─── Study Guide Tab (Training System — ported from paid webapp) ─────────────
+// ─── Study Guide Tab (Training System - ported from paid webapp) ─────────────
 interface TrainingModule {
   skill: string;
   title: string;
@@ -1031,7 +1031,7 @@ function StudyGuideTab({ result, loading, onRun, jobTitle, jobDescription }: { r
               <h3 className="text-lg font-bold text-white mt-2">Generate Audio Podcast</h3>
             </div>
             <p className="text-sm text-gray-600 text-center leading-relaxed">
-              Use Google NotebookLM to create an AI-generated podcast discussion about these job requirements. The job description will be copied to your clipboard — paste it as a source in NotebookLM and click <strong>"Generate Audio Overview"</strong>.
+              Use Google NotebookLM to create an AI-generated podcast discussion about these job requirements. The job description will be copied to your clipboard. Paste it as a source in NotebookLM and click <strong>"Generate Audio Overview"</strong>.
             </p>
             <div className="flex gap-3 mt-6">
               <button onClick={() => setShowPodcastModal(false)} className="flex-1 px-4 py-2.5 text-sm font-medium text-gray-700 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors">Cancel</button>
@@ -1214,7 +1214,7 @@ function LessonPlayerInline({ lesson, moduleTitle, lessonIndex, totalLessons, on
   );
 }
 
-// ─── Interview Prep Tab — Timed Interview Zone ──────────────────────────────
+// ─── Interview Prep Tab - Timed Interview Zone ──────────────────────────────
 function InterviewTab({ result, loading, onRun, jobTitle, jobDescription }: { result: any; loading: boolean; onRun: () => void; jobTitle?: string; jobDescription?: string }) {
   const [mode, setMode] = useState<"lobby" | "zone" | "review">("lobby");
   const [currentQ, setCurrentQ] = useState(0);
@@ -1370,7 +1370,7 @@ function InterviewTab({ result, loading, onRun, jobTitle, jobDescription }: { re
                 <div key={i} className={`px-4 py-3 ${isCorrect ? "bg-green-50/50" : wasSkipped ? "bg-white/[0.04]" : "bg-red-50/50"}`}>
                   <div className="flex items-start gap-2">
                     <span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[9px] font-bold text-white ${isCorrect ? "bg-green-500" : wasSkipped ? "bg-gray-400" : "bg-red-500"}`}>
-                      {isCorrect ? "✓" : wasSkipped ? "—" : "✗"}
+                      {isCorrect ? "✓" : wasSkipped ? "-" : "✗"}
                     </span>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-white">{q.question}</p>

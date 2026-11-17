@@ -1,5 +1,5 @@
 # ============================================================================
-# Jobaton OSS — Single-container Docker build
+# Jobaton OSS - Single-container Docker build
 # Serves both API + static frontend from one Node.js process
 # ============================================================================
 

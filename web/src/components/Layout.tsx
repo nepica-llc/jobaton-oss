@@ -82,7 +82,7 @@ export default function Layout() {
       {/* Footer */}
       <footer className="glass-footer py-3">
         <div className={`max-w-[1440px] mx-auto px-8 flex items-center justify-between text-[11px] ${isDark ? "text-[#555]" : "text-[#8898aa]"}`}>
-          <span>Jobaton OSS — Self-hosted AI career toolkit</span>
+          <span>Jobaton OSS: self-hosted AI career toolkit</span>
           <a href="https://jobaton.com" target="_blank" rel="noopener noreferrer" className="hover:text-[#028FA2] transition-colors">
             jobaton.com
           </a>

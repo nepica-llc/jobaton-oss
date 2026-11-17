@@ -247,7 +247,7 @@ export default function Jobs() {
         </button>
       </div>
 
-      {/* Stats tiles — glass, transparent highlight */}
+      {/* Stats tiles - glass, transparent highlight */}
       <div className="grid grid-cols-3 sm:grid-cols-7 gap-2 mb-6">
         <button onClick={() => { setFilterStatus("all"); setViewMode("my-jobs"); }} className={`px-3 py-3 rounded-xl text-center text-xs font-medium transition-all ${filterStatus === "all" && viewMode === "my-jobs" ? "glass-stat-active text-[#028FA2]" : "glass-stat text-[#888] hover:shadow-sm"}`}>
           All <span className="block text-xl font-bold mt-0.5">{jobs.length}</span>
@@ -275,7 +275,7 @@ export default function Jobs() {
         </button>
       </div>
 
-      {/* Add Job — paste JD with resume selector */}
+      {/* Add Job - paste JD with resume selector */}
       {showForm && (
         <div className="glass-card rounded-lg p-5 mb-6">
           <div className="flex items-center justify-between mb-3">
@@ -447,14 +447,14 @@ export default function Jobs() {
                               {STATUSES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
                             </select>
                           </td>
-                          <td className="px-4 py-3 text-xs text-[#555]">{job.location || "—"}</td>
+                          <td className="px-4 py-3 text-xs text-[#555]">{job.location || "-"}</td>
                           <td className="px-4 py-3">
                             <PrepDots prep={prep} />
                           </td>
                           <td className="px-4 py-3">
                             {prep.ats?.score ? (
                               <span className={`text-xs font-bold ${prep.ats.score >= 80 ? "text-green-600" : prep.ats.score >= 60 ? "text-amber-600" : "text-red-600"}`}>{prep.ats.score}%</span>
-                            ) : <span className="text-xs text-gray-300">—</span>}
+                            ) : <span className="text-xs text-gray-300">-</span>}
                           </td>
                           <td className="px-4 py-3">
                             <div className="flex items-center gap-1">
@@ -515,7 +515,7 @@ export default function Jobs() {
                 </button>
               )}
             </div>
-            <p className="text-[10px] text-[#555]">Powered by <a href="https://github.com/speedyapply/JobSpy" target="_blank" rel="noopener noreferrer" className="text-[#028FA2] hover:underline">JobSpy</a> — scrapes Indeed, LinkedIn, Glassdoor. Results cached for 6 hours.</p>
+            <p className="text-[10px] text-[#555]">Powered by <a href="https://github.com/speedyapply/JobSpy" target="_blank" rel="noopener noreferrer" className="text-[#028FA2] hover:underline">JobSpy</a>. Scrapes Indeed, LinkedIn, Glassdoor. Results cached for 6 hours.</p>
           </div>
 
           {/* Results */}
