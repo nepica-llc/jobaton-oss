@@ -45,6 +45,43 @@ db.exec(`
   );
 `);
 
+// ─── Profiles migration ─────────────────────────────────────────────────────
+// Each profile owns its profile data, resumes, cover letters and jobs. Rows that
+// existed before profiles were added belong to the "default" profile.
+const DATA_TABLES = ["resumes", "cover_letters", "jobs"] as const;
+const hasColumn = (table: string, col: string) =>
+  (db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]).some((c) => c.name === col);
+for (const t of DATA_TABLES) {
+  if (!hasColumn(t, "profile_id")) db.exec(`ALTER TABLE ${t} ADD COLUMN profile_id TEXT NOT NULL DEFAULT 'default'`);
+}
+if (!hasColumn("profile", "name")) db.exec("ALTER TABLE profile ADD COLUMN name TEXT");
+db.prepare("INSERT OR IGNORE INTO profile (id, data, updated_at, name) VALUES ('default', 'null', ?, 'Default')").run(new Date().toISOString());
+db.exec("UPDATE profile SET name = 'Default' WHERE id = 'default' AND name IS NULL");
+
+export function listProfiles(): { id: string; name: string }[] {
+  return db.prepare("SELECT id, COALESCE(name, id) AS name FROM profile ORDER BY id = 'default' DESC, rowid").all() as any[];
+}
+
+export function profileExists(id: string): boolean {
+  return !!db.prepare("SELECT 1 FROM profile WHERE id = ?").get(id);
+}
+
+export function createProfile(id: string, name: string): { id: string; name: string } {
+  db.prepare("INSERT INTO profile (id, data, updated_at, name) VALUES (?, 'null', ?, ?)").run(id, new Date().toISOString(), name);
+  return { id, name };
+}
+
+export function renameProfile(id: string, name: string): boolean {
+  return db.prepare("UPDATE profile SET name = ? WHERE id = ?").run(name, id).changes > 0;
+}
+
+export function deleteProfile(id: string): void {
+  db.transaction(() => {
+    for (const t of DATA_TABLES) db.prepare(`DELETE FROM ${t} WHERE profile_id = ?`).run(id);
+    db.prepare("DELETE FROM profile WHERE id = ?").run(id);
+  })();
+}
+
 // ─── Settings ───────────────────────────────────────────────────────────────
 export function getSettings(): Record<string, string> {
   const rows = db.prepare("SELECT key, value FROM settings").all() as { key: string; value: string }[];
@@ -64,58 +101,59 @@ export function saveSettings(settings: Record<string, string>): void {
 }
 
 // ─── Profile ────────────────────────────────────────────────────────────────
-export function getProfile(): any {
-  const row = db.prepare("SELECT data FROM profile WHERE id = 'default'").get() as { data: string } | undefined;
+export function getProfile(pid: string): any {
+  const row = db.prepare("SELECT data FROM profile WHERE id = ?").get(pid) as { data: string } | undefined;
   return row ? JSON.parse(row.data) : null;
 }
 
-export function saveProfile(data: any): any {
+export function saveProfile(data: any, pid: string): any {
   const now = new Date().toISOString();
-  db.prepare("INSERT OR REPLACE INTO profile (id, data, updated_at) VALUES ('default', ?, ?)").run(JSON.stringify(data), now);
+  db.prepare("UPDATE profile SET data = ?, updated_at = ? WHERE id = ?").run(JSON.stringify(data), now, pid);
   return { ...data, updated_at: now };
 }
 
 // ─── Generic CRUD (resumes, cover_letters, jobs) ────────────────────────────
-export function readCollection<T = any>(table: string): T[] {
-  const rows = db.prepare(`SELECT id, data, created_at, updated_at FROM ${table} ORDER BY created_at DESC`).all() as any[];
+export function readCollection<T = any>(table: string, pid: string): T[] {
+  const rows = db.prepare(`SELECT id, data, created_at, updated_at FROM ${table} WHERE profile_id = ? ORDER BY created_at DESC`).all(pid) as any[];
   return rows.map((r) => ({ ...JSON.parse(r.data), id: r.id, created_at: r.created_at, updated_at: r.updated_at }));
 }
 
-export function getById<T = any>(table: string, id: string): T | undefined {
-  const row = db.prepare(`SELECT data, created_at, updated_at FROM ${table} WHERE id = ?`).get(id) as any;
+export function getById<T = any>(table: string, id: string, pid: string): T | undefined {
+  const row = db.prepare(`SELECT data, created_at, updated_at FROM ${table} WHERE id = ? AND profile_id = ?`).get(id, pid) as any;
   if (!row) return undefined;
   return { ...JSON.parse(row.data), id, created_at: row.created_at, updated_at: row.updated_at };
 }
 
-export function upsert<T extends { id: string; status?: string }>(table: string, item: T): T {
+export function upsert<T extends { id: string; status?: string }>(table: string, item: T, pid: string): T {
   const now = new Date().toISOString();
-  const existing = db.prepare(`SELECT created_at FROM ${table} WHERE id = ?`).get(item.id) as any;
+  const existing = db.prepare(`SELECT created_at, profile_id FROM ${table} WHERE id = ?`).get(item.id) as any;
+  if (existing && existing.profile_id !== pid) throw new Error("Not found");
   const created = existing?.created_at || now;
   const { id, created_at, updated_at, ...rest } = item as any;
   const data = JSON.stringify(rest);
 
   if (table === "jobs") {
-    db.prepare(`INSERT OR REPLACE INTO jobs (id, data, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`)
-      .run(item.id, data, (item as any).status || "saved", created, now);
+    db.prepare(`INSERT OR REPLACE INTO jobs (id, data, status, created_at, updated_at, profile_id) VALUES (?, ?, ?, ?, ?, ?)`)
+      .run(item.id, data, (item as any).status || "saved", created, now, pid);
   } else {
-    db.prepare(`INSERT OR REPLACE INTO ${table} (id, data, created_at, updated_at) VALUES (?, ?, ?, ?)`)
-      .run(item.id, data, created, now);
+    db.prepare(`INSERT OR REPLACE INTO ${table} (id, data, created_at, updated_at, profile_id) VALUES (?, ?, ?, ?, ?)`)
+      .run(item.id, data, created, now, pid);
   }
   return { ...rest, id: item.id, created_at: created, updated_at: now } as T;
 }
 
-export function remove(table: string, id: string): boolean {
-  const result = db.prepare(`DELETE FROM ${table} WHERE id = ?`).run(id);
+export function remove(table: string, id: string, pid: string): boolean {
+  const result = db.prepare(`DELETE FROM ${table} WHERE id = ? AND profile_id = ?`).run(id, pid);
   return result.changes > 0;
 }
 
 // ─── Jobs-specific ──────────────────────────────────────────────────────────
-export function getJobsByStatus(status?: string): any[] {
+export function getJobsByStatus(pid: string, status?: string): any[] {
   if (status) {
-    const rows = db.prepare("SELECT id, data, status, created_at, updated_at FROM jobs WHERE status = ? ORDER BY updated_at DESC").all(status) as any[];
+    const rows = db.prepare("SELECT id, data, status, created_at, updated_at FROM jobs WHERE status = ? AND profile_id = ? ORDER BY updated_at DESC").all(status, pid) as any[];
     return rows.map((r) => ({ ...JSON.parse(r.data), id: r.id, status: r.status, created_at: r.created_at, updated_at: r.updated_at }));
   }
-  const rows = db.prepare("SELECT id, data, status, created_at, updated_at FROM jobs ORDER BY updated_at DESC").all() as any[];
+  const rows = db.prepare("SELECT id, data, status, created_at, updated_at FROM jobs WHERE profile_id = ? ORDER BY updated_at DESC").all(pid) as any[];
   return rows.map((r) => ({ ...JSON.parse(r.data), id: r.id, status: r.status, created_at: r.created_at, updated_at: r.updated_at }));
 }
 
