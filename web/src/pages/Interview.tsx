@@ -37,7 +37,7 @@ export default function Interview() {
     }
     setLoading(true);
     try {
-      const data = await api.interviewPrep(jobTitle, company, jobDescription);
+      const data = await api.interviewPrep(jobTitle, company, jobDescription, "technical");
       setPrepData(data);
     } catch (err: any) {
       toast.error(err.message);
