@@ -28,6 +28,8 @@ export const api = {
     request<{ id: string; name: string }>("/profiles", { method: "POST", body: JSON.stringify({ name }) }),
   renameProfile: (id: string, name: string) =>
     request(`/profiles/${id}`, { method: "PUT", body: JSON.stringify({ name }) }),
+  resetProfile: (id: string) =>
+    request(`/profiles/${id}/reset`, { method: "POST" }),
   deleteProfile: (id: string) =>
     request(`/profiles/${id}`, { method: "DELETE" }),
 

@@ -75,9 +75,17 @@ export function renameProfile(id: string, name: string): boolean {
   return db.prepare("UPDATE profile SET name = ? WHERE id = ?").run(name, id).changes > 0;
 }
 
-export function deleteProfile(id: string): void {
+// Clears a profile's details, resumes, cover letters and jobs but keeps the profile itself.
+export function resetProfile(id: string): void {
   db.transaction(() => {
     for (const t of DATA_TABLES) db.prepare(`DELETE FROM ${t} WHERE profile_id = ?`).run(id);
+    db.prepare("UPDATE profile SET data = 'null', updated_at = ? WHERE id = ?").run(new Date().toISOString(), id);
+  })();
+}
+
+export function deleteProfile(id: string): void {
+  db.transaction(() => {
+    resetProfile(id);
     db.prepare("DELETE FROM profile WHERE id = ?").run(id);
   })();
 }
