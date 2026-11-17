@@ -350,9 +350,9 @@ Rules:
                 <h3 className="text-sm font-semibold text-white truncate group-hover:text-[#028FA2] transition-colors">{r.name || "Untitled Resume"}</h3>
                 <p className="text-xs text-[#555] mt-1">{r.fullName || "No name"}</p>
                 <div className="flex items-center gap-2 mt-2">
-                  <span className="px-2 py-0.5 bg-[#028FA2]/10 text-[#028FA2] text-[10px] rounded-full font-medium">{getDomain(r)}</span>
+                  <span className="px-2 py-0.5 bg-[#028FA2]/10 text-[#028FA2] text-[0.667rem] rounded-full font-medium">{getDomain(r)}</span>
                 </div>
-                <div className="flex items-center gap-3 mt-3 pt-3 border-t border-white/40 text-[10px] text-[#555]">
+                <div className="flex items-center gap-3 mt-3 pt-3 border-t border-white/40 text-[0.667rem] text-[#555]">
                   <span>{r.experience?.length || 0} positions</span>
                   <span>·</span>
                   <span>{r.skills?.length || 0} skills</span>
@@ -366,12 +366,12 @@ Rules:
               <table className="w-full text-left">
                 <thead>
                   <tr className="border-b border-white/[0.06]">
-                    <th className="px-4 py-3 text-[10px] font-semibold text-[#555] uppercase tracking-wider">Resume</th>
-                    <th className="px-4 py-3 text-[10px] font-semibold text-[#555] uppercase tracking-wider">Full Name</th>
-                    <th className="px-4 py-3 text-[10px] font-semibold text-[#555] uppercase tracking-wider">Domain</th>
-                    <th className="px-4 py-3 text-[10px] font-semibold text-[#555] uppercase tracking-wider">Experience</th>
-                    <th className="px-4 py-3 text-[10px] font-semibold text-[#555] uppercase tracking-wider">Skills</th>
-                    <th className="px-4 py-3 text-[10px] font-semibold text-[#555] uppercase tracking-wider w-8"></th>
+                    <th className="px-4 py-3 text-[0.667rem] font-semibold text-[#555] uppercase tracking-wider">Resume</th>
+                    <th className="px-4 py-3 text-[0.667rem] font-semibold text-[#555] uppercase tracking-wider">Full Name</th>
+                    <th className="px-4 py-3 text-[0.667rem] font-semibold text-[#555] uppercase tracking-wider">Domain</th>
+                    <th className="px-4 py-3 text-[0.667rem] font-semibold text-[#555] uppercase tracking-wider">Experience</th>
+                    <th className="px-4 py-3 text-[0.667rem] font-semibold text-[#555] uppercase tracking-wider">Skills</th>
+                    <th className="px-4 py-3 text-[0.667rem] font-semibold text-[#555] uppercase tracking-wider w-8"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100/50">
@@ -384,7 +384,7 @@ Rules:
                         </div>
                       </td>
                       <td className="px-4 py-3 text-xs text-[#888] font-medium">{r.fullName || "-"}</td>
-                      <td className="px-4 py-3"><span className="px-2 py-0.5 bg-[#028FA2]/10 text-[#028FA2] text-[10px] rounded-full font-medium">{getDomain(r)}</span></td>
+                      <td className="px-4 py-3"><span className="px-2 py-0.5 bg-[#028FA2]/10 text-[#028FA2] text-[0.667rem] rounded-full font-medium">{getDomain(r)}</span></td>
                       <td className="px-4 py-3 text-xs text-[#555]">{r.experience?.length || 0} positions</td>
                       <td className="px-4 py-3 text-xs text-[#555]">{r.skills?.length || 0}</td>
                       <td className="px-4 py-3">
@@ -397,7 +397,7 @@ Rules:
                 </tbody>
               </table>
             </div>
-            <div className="px-4 py-2 border-t border-white/[0.04] text-[10px] text-[#555]">
+            <div className="px-4 py-2 border-t border-white/[0.04] text-[0.667rem] text-[#555]">
               {resumes.length} base resume{resumes.length !== 1 ? "s" : ""}
             </div>
           </div>
@@ -444,7 +444,7 @@ Rules:
                 className="w-full px-4 py-3 border border-white/10 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#028FA2] focus:border-transparent"
                 placeholder="e.g. 1_John_Doe_IAM"
               />
-              <p className="text-[10px] text-[#555] mt-1.5">Suggested: <button onClick={() => setNameInput(nameModal.suggestedName)} className="text-[#028FA2] hover:underline font-medium">{nameModal.suggestedName}</button></p>
+              <p className="text-[0.667rem] text-[#555] mt-1.5">Suggested: <button onClick={() => setNameInput(nameModal.suggestedName)} className="text-[#028FA2] hover:underline font-medium">{nameModal.suggestedName}</button></p>
               <div className="flex gap-3 mt-5">
                 <button onClick={() => setNameModal(null)} className="flex-1 px-4 py-2.5 text-sm font-medium text-[#888] bg-white/[0.04] border border-white/10 rounded-xl hover:bg-white/[0.04] transition-colors">
                   Cancel
@@ -585,7 +585,7 @@ Rules:
                   ))}
                 </div>
                 <input placeholder="Type a skill and press Enter" onKeyDown={(e) => { if (e.key === "Enter" && (e.target as HTMLInputElement).value.trim()) { setActive({ ...active, skills: [...active.skills, (e.target as HTMLInputElement).value.trim()] }); (e.target as HTMLInputElement).value = ""; } }} className="glass-input w-full px-3 py-2 rounded-lg text-sm" />
-                <p className="text-[10px] text-[#555] mt-1">{active.skills.length} skills</p>
+                <p className="text-[0.667rem] text-[#555] mt-1">{active.skills.length} skills</p>
               </div>
             )}
 
@@ -696,18 +696,18 @@ Rules:
 
         {/* RIGHT: Live resume preview (resume-shaped, scaled to fit) */}
         <div className="hidden lg:block w-[340px] shrink-0 sticky top-4">
-          <div className="bg-[#1a1a1a] border border-white/[0.08] rounded-xl shadow-sm p-4 aspect-[8.5/11] overflow-hidden text-[8px] leading-tight" style={{ transform: 'scale(1)', transformOrigin: 'top center' }}>
+          <div className="bg-[#1a1a1a] border border-white/[0.08] rounded-xl shadow-sm p-4 aspect-[8.5/11] overflow-hidden text-[0.533rem] leading-tight" style={{ transform: 'scale(1)', transformOrigin: 'top center' }}>
             {/* Header */}
             <div className={`border-b border-white/[0.08] pb-2 mb-2 transition-all ${activeSection === "info" ? "ring-2 ring-[#028FA2]/30 rounded-lg p-1.5 -m-1.5" : ""}`} onClick={() => setActiveSection("info")}>
               <p className="text-sm font-bold text-white">{active.fullName || "Your Name"}</p>
-              <p className="text-[9px] text-[#888]">{[active.email, active.phone, active.location].filter(Boolean).join(" · ")}</p>
-              {(active.linkedin || active.github) && <p className="text-[8px] text-[#555] truncate">{[active.linkedin, active.github, active.portfolio].filter(Boolean).join(" | ")}</p>}
+              <p className="text-[0.6rem] text-[#888]">{[active.email, active.phone, active.location].filter(Boolean).join(" · ")}</p>
+              {(active.linkedin || active.github) && <p className="text-[0.533rem] text-[#555] truncate">{[active.linkedin, active.github, active.portfolio].filter(Boolean).join(" | ")}</p>}
             </div>
 
             {/* Summary */}
             {active.summary && (
               <div className={`mb-2 transition-all cursor-pointer ${activeSection === "summary" ? "ring-2 ring-[#028FA2]/30 rounded-lg p-1.5 -mx-1.5" : ""}`} onClick={() => setActiveSection("summary")}>
-                <p className="font-bold uppercase text-[8px] text-[#555] mb-0.5">Summary</p>
+                <p className="font-bold uppercase text-[0.533rem] text-[#555] mb-0.5">Summary</p>
                 <p className="text-[#888] line-clamp-3">{active.summary}</p>
               </div>
             )}
@@ -715,11 +715,11 @@ Rules:
             {/* Experience */}
             {active.experience.length > 0 && (
               <div className={`mb-2 transition-all cursor-pointer ${activeSection === "experience" ? "ring-2 ring-[#028FA2]/30 rounded-lg p-1.5 -mx-1.5" : ""}`} onClick={() => setActiveSection("experience")}>
-                <p className="font-bold uppercase text-[8px] text-[#555] mb-0.5">Experience</p>
+                <p className="font-bold uppercase text-[0.533rem] text-[#555] mb-0.5">Experience</p>
                 {active.experience.slice(0, 3).map((exp, i) => (
                   <div key={i} className="mb-1">
                     <p className="font-semibold text-white">{exp.title || "Title"} <span className="font-normal text-[#555]">· {exp.company}</span></p>
-                    <p className="text-[8px] text-[#555]">{exp.startDate} – {exp.endDate || "Present"}</p>
+                    <p className="text-[0.533rem] text-[#555]">{exp.startDate} – {exp.endDate || "Present"}</p>
                     {exp.bullets.slice(0, 2).map((b, bi) => b && <p key={bi} className="text-[#888] pl-2">• {b.slice(0, 60)}{b.length > 60 ? "…" : ""}</p>)}
                   </div>
                 ))}
@@ -730,7 +730,7 @@ Rules:
             {/* Education */}
             {(active.education || []).length > 0 && (
               <div className={`mb-2 transition-all cursor-pointer ${activeSection === "education" ? "ring-2 ring-[#028FA2]/30 rounded-lg p-1.5 -mx-1.5" : ""}`} onClick={() => setActiveSection("education")}>
-                <p className="font-bold uppercase text-[8px] text-[#555] mb-0.5">Education</p>
+                <p className="font-bold uppercase text-[0.533rem] text-[#555] mb-0.5">Education</p>
                 {(active.education || []).map((edu, i) => (
                   <p key={i} className="text-white"><span className="font-semibold">{edu.degree}</span> {edu.field && `in ${edu.field}`}, {edu.school} {edu.year && `(${edu.year})`}</p>
                 ))}
@@ -740,7 +740,7 @@ Rules:
             {/* Skills */}
             {active.skills.length > 0 && (
               <div className={`mb-2 transition-all cursor-pointer ${activeSection === "skills" ? "ring-2 ring-[#028FA2]/30 rounded-lg p-1.5 -mx-1.5" : ""}`} onClick={() => setActiveSection("skills")}>
-                <p className="font-bold uppercase text-[8px] text-[#555] mb-0.5">Skills</p>
+                <p className="font-bold uppercase text-[0.533rem] text-[#555] mb-0.5">Skills</p>
                 <p className="text-[#888]">{active.skills.join(" · ")}</p>
               </div>
             )}
@@ -748,7 +748,7 @@ Rules:
             {/* Certifications */}
             {(active.certifications || []).length > 0 && (
               <div className={`mb-2 transition-all cursor-pointer ${activeSection === "certifications" ? "ring-2 ring-[#028FA2]/30 rounded-lg p-1.5 -mx-1.5" : ""}`} onClick={() => setActiveSection("certifications")}>
-                <p className="font-bold uppercase text-[8px] text-[#555] mb-0.5">Certifications</p>
+                <p className="font-bold uppercase text-[0.533rem] text-[#555] mb-0.5">Certifications</p>
                 {(active.certifications || []).map((c, i) => <p key={i} className="text-[#888]">{c.name}, {c.issuer} ({c.year})</p>)}
               </div>
             )}
@@ -756,7 +756,7 @@ Rules:
             {/* Projects */}
             {(active.projects || []).length > 0 && (
               <div className={`mb-2 transition-all cursor-pointer ${activeSection === "other" ? "ring-2 ring-[#028FA2]/30 rounded-lg p-1.5 -mx-1.5" : ""}`} onClick={() => setActiveSection("other")}>
-                <p className="font-bold uppercase text-[8px] text-[#555] mb-0.5">Projects</p>
+                <p className="font-bold uppercase text-[0.533rem] text-[#555] mb-0.5">Projects</p>
                 {(active.projects || []).map((p, i) => <p key={i} className="text-white"><span className="font-semibold">{p.name}</span> <span className="text-[#555]">{p.technologies && `(${p.technologies})`}</span></p>)}
               </div>
             )}

@@ -88,7 +88,7 @@ export default function Dashboard() {
         <>
           <div className="glass-card p-4 mb-4">
             <div className="flex items-center justify-between mb-2">
-              <h2 className="text-[13px] font-medium text-white">Getting Started</h2>
+              <h2 className="text-[0.867rem] font-medium text-white">Getting Started</h2>
               <div className="flex items-center gap-3">
                 <span className="text-xs text-[#666]">{completedSteps}/{steps.length}</span>
                 {completedSteps === steps.length && (
@@ -115,7 +115,7 @@ export default function Dashboard() {
                       <Icon className="h-4 w-4 text-[#888] shrink-0" />
                     )}
                     <div className="flex-1 min-w-0">
-                      <h3 className={`text-[13px] font-medium ${step.done ? "text-[#666] line-through" : "text-white"}`}>{step.title}</h3>
+                      <h3 className={`text-[0.867rem] font-medium ${step.done ? "text-[#666] line-through" : "text-white"}`}>{step.title}</h3>
                       <p className="text-xs text-[#555] mt-0.5">{step.desc}</p>
                     </div>
                     {!step.done && (
@@ -153,7 +153,7 @@ export default function Dashboard() {
           {/* Pipeline - circles */}
           {stats.jobs > 0 && (
             <div className="glass-card p-5">
-              <h3 className="text-[13px] font-medium text-white mb-4">Pipeline</h3>
+              <h3 className="text-[0.867rem] font-medium text-white mb-4">Pipeline</h3>
               <div className="flex items-center justify-between gap-2">
                 {[
                   { key: "saved", label: "Saved", color: "#a1a1aa" },
@@ -173,7 +173,7 @@ export default function Dashboard() {
                         </svg>
                         <span className="absolute inset-0 flex items-center justify-center text-sm font-bold text-white">{count}</span>
                       </div>
-                      <p className="text-[10px] text-[#666]">{label}</p>
+                      <p className="text-[0.667rem] text-[#666]">{label}</p>
                     </div>
                   );
                 })}
@@ -185,7 +185,7 @@ export default function Dashboard() {
           {stats.jobs > 0 && (
             <div className="glass-card p-5">
               <div className="flex items-center justify-between mb-3">
-                <h3 className="text-[13px] font-medium text-white">Prep Progress</h3>
+                <h3 className="text-[0.867rem] font-medium text-white">Prep Progress</h3>
                 <span className="text-xs text-[#555]">{stats.prepProgress.ats + stats.prepProgress.tailor + stats.prepProgress.cover + stats.prepProgress.study + stats.prepProgress.interview}/{stats.jobs * 5}</span>
               </div>
               <div className="grid grid-cols-5 gap-3">
@@ -199,7 +199,7 @@ export default function Dashboard() {
                   <div key={label} className="text-center">
                     <Icon className="h-4 w-4 mx-auto text-[#666] mb-1" />
                     <p className="text-sm font-semibold text-white">{count}/{stats.jobs}</p>
-                    <p className="text-[10px] text-[#555]">{label}</p>
+                    <p className="text-[0.667rem] text-[#555]">{label}</p>
                   </div>
                 ))}
               </div>
@@ -211,7 +211,7 @@ export default function Dashboard() {
             <Link to="/jobs" className="inline-flex items-center gap-2 px-4 py-2 glass-card group transition-all">
               <TrendingUp className="h-3.5 w-3.5 text-[#028FA2] shrink-0" />
               <span className="text-xs font-medium text-white">Continue where you left off</span>
-              <span className="text-[10px] text-[#555]">({stats.jobs - (stats.statusBreakdown["offered"] || 0) - (stats.statusBreakdown["rejected"] || 0) - (stats.statusBreakdown["withdrawn"] || 0)} active)</span>
+              <span className="text-[0.667rem] text-[#555]">({stats.jobs - (stats.statusBreakdown["offered"] || 0) - (stats.statusBreakdown["rejected"] || 0) - (stats.statusBreakdown["withdrawn"] || 0)} active)</span>
               <ArrowRight className="h-3 w-3 text-[#555] group-hover:text-white transition-colors" />
             </Link>
           )}

@@ -231,10 +231,10 @@ export default function Profile() {
                   <FileText className="h-3.5 w-3.5 text-[#028FA2] shrink-0" />
                   <span className="text-sm font-medium text-white truncate">{r.name || r.fullName || "Untitled"}</span>
                 </div>
-                <span className="text-[10px] text-[#555] shrink-0">{r.skills?.length || 0} skills · {r.experience?.length || 0} exp</span>
+                <span className="text-[0.667rem] text-[#555] shrink-0">{r.skills?.length || 0} skills · {r.experience?.length || 0} exp</span>
               </div>
             ))}
-            {resumes.length > 3 && <p className="text-[10px] text-[#555] text-center">+{resumes.length - 3} more</p>}
+            {resumes.length > 3 && <p className="text-[0.667rem] text-[#555] text-center">+{resumes.length - 3} more</p>}
           </div>
         </div>
       )}
