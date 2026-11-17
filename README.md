@@ -1,52 +1,34 @@
-<div align="center">
+<p align="center">
+  <img src="logo/logo.png" alt="Jobaton" width="110" />
+</p>
 
-<img src="https://raw.githubusercontent.com/nepica-llc/jobaton-oss/main/logo/logo.png" alt="Jobaton logo" width="120" />
+<h1 align="center">Jobaton OSS</h1>
 
-# Jobaton OSS
-
-### Your job search, on your machine, powered by your own AI.
-
-Find jobs, beat the ATS, write cover letters and prep for interviews.<br/>
-Self-hosted, open source, and private by default.
-
-[![License: MIT](https://img.shields.io/github/license/nepica-llc/jobaton-oss?color=0E8FA0)](https://github.com/nepica-llc/jobaton-oss/blob/main/LICENSE)
-[![Docker Pulls](https://img.shields.io/docker/pulls/nepica/jobaton?color=0E8FA0&logo=docker&logoColor=white)](https://hub.docker.com/r/nepica/jobaton)
-[![Latest release](https://img.shields.io/github/v/tag/nepica-llc/jobaton-oss?label=release&color=0E8FA0)](https://github.com/nepica-llc/jobaton-oss/tags)
-[![Bring your own key](https://img.shields.io/badge/AI-bring%20your%20own%20key-0E8FA0)](https://github.com/nepica-llc/jobaton-oss#-pick-your-ai)
-
-[Quick start](https://github.com/nepica-llc/jobaton-oss#-quick-start) · [Features](https://github.com/nepica-llc/jobaton-oss#-what-you-can-do) · [AI providers](https://github.com/nepica-llc/jobaton-oss#-pick-your-ai) · [Privacy](https://github.com/nepica-llc/jobaton-oss#-privacy-and-security) · [Contributing](https://github.com/nepica-llc/jobaton-oss#-contributing)
-
-</div>
+<p align="center">
+  A self-hosted, open-source job search toolkit powered by your own AI key.
+</p>
 
 ---
 
-## 💡 Why Jobaton?
+## Overview
 
-Job hunting means juggling a dozen tabs, a pile of resume versions and a spreadsheet you stopped updating in week two. Jobaton puts the whole search in one place and uses AI where it actually helps: matching your resume to a role, writing the first draft and getting you ready for the interview.
+Jobaton brings your job search into one place: find roles, score your resume against them, write tailored cover letters and prepare for interviews. It runs on your own machine, stores everything in a local SQLite database and sends data only to the AI provider you choose.
 
-- 🔒 **Private.** Everything is stored in a local SQLite database. No accounts, no cloud, no tracking.
-- 🔑 **Your AI, your bill.** Plug in a key from OpenAI, Anthropic, Google or Mistral. Nothing is routed through us.
-- 🐳 **One command.** `docker compose up` and you're running.
+## Features
 
-## ✨ What you can do
+| Feature | Description |
+|---|---|
+| Job search | Search Indeed, LinkedIn and Glassdoor and save the roles you want to pursue |
+| Resume builder | Upload a PDF or build a resume from scratch, with AI suggestions |
+| ATS scanner | Score your resume against a job description and see what's missing |
+| Cover letters | Generate a cover letter tailored to a specific role |
+| Job prep | Get a study guide and likely interview questions for each saved job |
+| Interview practice | Practice with AI-generated questions and mock sessions |
+| Dashboard | Track saved jobs, resumes and progress in one view |
 
-| | Feature | What it does |
-|---|---|---|
-| 🔎 | **Job search** | Search Indeed, LinkedIn and Glassdoor from one box and save the roles you like |
-| 📄 | **Resume builder** | Upload a PDF or build one from scratch, with AI suggestions |
-| 🎯 | **ATS scanner** | Score your resume against any job description and see what's missing |
-| ✉️ | **Cover letters** | Generate a tailored cover letter for a specific role in seconds |
-| 🧭 | **Job prep** | Get a study guide and likely interview questions for each saved job |
-| 🎤 | **Interview practice** | AI-driven questions and mock sessions |
-| 📊 | **Dashboard** | See your saved jobs, resumes and progress at a glance |
+## Quick start
 
-### How it fits together
-
-🔎 **Find a job** → 🎯 **Scan your resume** → 📄 **Tailor it** → ✉️ **Cover letter** → 🧭 **Prep and practice** → 🎉 **Interview ready**
-
-## 🚀 Quick start
-
-**Recommended: Docker Compose** (includes the job search service)
+Docker Compose is the recommended setup, as it includes the job search service.
 
 ```bash
 git clone https://github.com/nepica-llc/jobaton-oss.git
@@ -54,30 +36,30 @@ cd jobaton-oss
 docker compose up --build
 ```
 
-Open **http://localhost:3050**, go to **Settings**, add your AI key, and you're done.
+Open http://localhost:3050, go to **Settings** and add your AI provider key.
 
-**Just want to try it? Single container from Docker Hub**
+To try it with a single container from Docker Hub:
 
 ```bash
 docker run -d -p 127.0.0.1:3050:3001 -v jobaton_data:/app/data nepica/jobaton
 ```
 
-Everything works except **Job search**, which needs the `jobspy` service that Docker Compose starts for you.
+Everything works in this mode except job search, which needs the `jobspy` service that Docker Compose starts.
 
-> **Requirements:** Docker (with Compose) and an API key from one of the supported AI providers.
+**Requirements:** Docker with Compose, and an API key from a supported AI provider.
 
-## 🤖 Pick your AI
+## AI providers
 
-Add a key in **Settings** and choose which provider is active. You can also set keys through environment variables.
+Add a key in **Settings** and choose the active provider. Keys can also be set through environment variables.
 
 | Provider | Default model | Environment variable |
 |---|---|---|
-| OpenAI | `gpt-4o-mini` (changeable in Settings) | `OPENAI_API_KEY` |
+| OpenAI | `gpt-4o-mini` (configurable in Settings) | `OPENAI_API_KEY` |
 | Anthropic | `claude-sonnet-4-20250514` | `ANTHROPIC_API_KEY` |
 | Google AI | `gemini-2.0-flash` | `GOOGLE_AI_KEY` |
 | Mistral | `mistral-large-latest` | `MISTRAL_API_KEY` |
 
-## ⚙️ Configuration
+## Configuration
 
 Copy `.env.example` to `.env` to change the defaults.
 
@@ -85,57 +67,51 @@ Copy `.env.example` to `.env` to change the defaults.
 |---|---|---|
 | `API_PORT` | `3001` | Port the app listens on |
 | `HOST` | `127.0.0.1` | Bind address (the Docker image uses `0.0.0.0` inside the container) |
-| `DATA_DIR` | `./data` | Where your local database lives |
-| `CORS_ORIGIN` | none | Comma separated origins allowed to call the API cross-origin |
+| `DATA_DIR` | `./data` | Location of the local database |
+| `CORS_ORIGIN` | none | Comma-separated origins allowed to call the API cross-origin |
 | `JOBSPY_URL` | set by Compose | Address of the job search service |
 
-## 🔐 Privacy and security
+## Privacy and security
 
-Jobaton OSS has **no login**. It's designed to run on your own computer with your own AI key, so:
+Jobaton OSS has no login. It is designed to run on your own computer with your own AI key.
 
-- The commands above publish it on `127.0.0.1` only, so it's reachable from your machine and nowhere else.
-- Cross-origin requests are blocked unless you set `CORS_ORIGIN`.
-- Your resumes and settings stay in the `jobaton_data` volume. Your AI key only goes to the provider you picked.
+- The commands above publish the app on `127.0.0.1` only, so it is reachable from your machine and nowhere else.
+- Cross-origin requests are blocked unless `CORS_ORIGIN` is set.
+- Resumes and settings stay in the `jobaton_data` volume. Your AI key is sent only to the provider you select.
 
-Want to reach it from another device? Put it behind a reverse proxy that adds authentication first. Don't expose it to a network as is.
+To access it from another device, place it behind a reverse proxy that adds authentication. Do not expose it to a network directly.
 
-## 🛠️ Development
+## Development
 
 ```bash
-pnpm install   # uses pnpm 9
-pnpm dev       # API + web app with hot reload
+pnpm install   # requires pnpm 9
+pnpm dev       # API and web app with hot reload
 ```
 
 ```
 jobaton-oss/
 ├── api/                 Express API: AI proxy and SQLite storage
-├── web/                 React app (Vite + Tailwind CSS)
-├── jobspy/              Python job search service (FastAPI + python-jobspy)
-├── Dockerfile           Multi-stage build: one container serves API and web app
-└── docker-compose.yml   App + job search service
+├── web/                 React app (Vite, Tailwind CSS)
+├── jobspy/              Python job search service (FastAPI, python-jobspy)
+├── Dockerfile           Multi-stage build serving the API and web app
+└── docker-compose.yml   App and job search service
 ```
 
-**Built with** React 18 · Vite · Tailwind CSS · Express · Node.js 22 · SQLite (better-sqlite3) · FastAPI · Docker
+Built with React 18, Vite, Tailwind CSS, Express, Node.js 22, SQLite (better-sqlite3), FastAPI and Docker.
 
-## 🤝 Contributing
+## Contributing
 
-Bug reports, ideas and pull requests are all welcome.
+Bug reports, ideas and pull requests are welcome.
 
-1. Open an [issue](https://github.com/nepica-llc/jobaton-oss/issues) to describe the bug or idea
-2. Fork the repo and create a branch
+1. Open an [issue](https://github.com/nepica-llc/jobaton-oss/issues) describing the bug or idea
+2. Fork the repository and create a branch
 3. Run `pnpm install && pnpm dev` and make your change
 4. Open a pull request
 
-## ⭐ Jobaton Pro
+## Jobaton Pro
 
-Love the OSS version but want more? [**Jobaton Pro**](https://jobaton.com) adds cloud sync, unlimited AI credits, mock interviews, sprint training and mentorship for $9.99/month.
+[Jobaton Pro](https://jobaton.com) adds cloud sync, unlimited AI credits, mock interviews, sprint training and mentorship for $9.99/month.
 
-## 📜 License
+## License
 
-[MIT](https://github.com/nepica-llc/jobaton-oss/blob/main/LICENSE). Free to use, modify and share.
-
-<div align="center">
-<br/>
-<img src="https://raw.githubusercontent.com/nepica-llc/jobaton-oss/main/logo/logo.png" alt="" width="32" /><br/>
-<sub>Made for job seekers who'd rather be preparing than tab-juggling.</sub>
-</div>
+[MIT](LICENSE)
