@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from "react-router-dom";
 import { ArrowLeft, ArrowRight, ScanSearch, FileText, Mail, MessageSquare, Loader2, Copy, Sparkles, Check, X, Download, BookOpen, Volume2, VolumeX } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
+import { downloadPDF as exportPDF, downloadWord, textToBlocks, safeFileName, type DocBlock } from "@/lib/exportDoc";
 
 const MOTIVATIONAL_QUOTES = [
   "The future belongs to those who believe in the beauty of their dreams. - Eleanor Roosevelt",
@@ -230,6 +231,7 @@ export default function JobPrep() {
         {activeTab === "ats" && <ATSTab result={atsResult} loading={tabLoading} onRun={runATS} />}
         {activeTab === "tailor" && (
           <TailorTab
+            fileBase={safeFileName(job.company, job.title)}
             result={tailorResult}
             loading={tabLoading}
             onRun={runTailor}
@@ -241,7 +243,7 @@ export default function JobPrep() {
             jobDescription={job.raw_description || ""}
           />
         )}
-        {activeTab === "cover-letter" && <CoverLetterTab result={coverLetterResult} loading={tabLoading} onRun={runCoverLetter} />}
+        {activeTab === "cover-letter" && <CoverLetterTab result={coverLetterResult} loading={tabLoading} onRun={runCoverLetter} fileBase={safeFileName("Cover Letter", job.company, job.title)} />}
         {activeTab === "study-guide" && <StudyGuideTab result={studyGuideResult} loading={tabLoading} onRun={runStudyGuide} onSave={(training) => { const next = { ...studyGuideResult, training }; setStudyGuideResult(next); persistPrep({ study_guide: next }); }} jobTitle={job.title || ""} jobDescription={job.raw_description || ""} />}
         {activeTab === "interview" && <InterviewTab result={interviewResult} loading={tabLoading} onRun={runInterviewPrep} jobTitle={job.title || ""} jobDescription={job.raw_description || ""} />}
       </div>
@@ -473,74 +475,41 @@ function ATSTab({ result, loading, onRun }: { result: any; loading: boolean; onR
 }
 
 // ─── Tailor Resume Tab ───────────────────────────────────────────────────────
-function TailorTab({ result, loading, onRun }: {
-  result: any; loading: boolean; onRun: () => void;
+function TailorTab({ result, loading, onRun, fileBase }: {
+  result: any; loading: boolean; onRun: () => void; fileBase: string;
   acceptedSuggestions: number[]; onAccept: (i: number) => void; onReject: (i: number) => void;
   atsScore: number | undefined; getResumeText: () => string; jobDescription: string;
 }) {
   const sections = result?.structured_sections || [];
 
-  const buildResumeHTML = () => {
-    let body = "";
+  const buildBlocks = (): DocBlock[] => {
+    if (sections.length === 0) return textToBlocks(result?.tailored_resume || "", true);
+    const blocks: DocBlock[] = [];
     for (const sec of sections) {
       if (sec.type === "header") {
-        const nameLine = sec.lines?.[0] || "";
-        const contactLine = sec.lines?.slice(1).join(" | ") || "";
-        body += `<div class="header"><h1>${nameLine}</h1>${contactLine ? `<p class="contact">${contactLine}</p>` : ""}</div>`;
+        if (sec.lines?.[0]) blocks.push({ kind: "name", text: sec.lines[0] });
+        const contact = sec.lines?.slice(1).join(" | ");
+        if (contact) blocks.push({ kind: "contact", text: contact });
       } else if (sec.entries?.length > 0) {
-        body += `<h2>${sec.name}</h2>`;
+        blocks.push({ kind: "heading", text: sec.name });
         for (const entry of sec.entries) {
-          body += `<div class="entry-header"><div class="entry-left"><span class="entry-title">${entry.title}</span>${entry.org ? ` <span class="entry-org">| ${entry.org}</span>` : ""}</div>`;
-          body += `<div class="entry-right">${[entry.date, entry.location].filter(Boolean).join(" | ")}</div></div>`;
-          if (entry.bullets?.length > 0) {
-            body += `<ul>${entry.bullets.map((b: string) => `<li>${b}</li>`).join("")}</ul>`;
-          }
+          blocks.push({ kind: "entry", title: entry.title || "", org: entry.org, right: [entry.date, entry.location].filter(Boolean).join(" | ") });
+          for (const b of entry.bullets || []) blocks.push({ kind: "bullet", text: b });
         }
       } else if (sec.lines?.length > 0) {
-        body += `<h2>${sec.name}</h2>`;
-        for (const line of sec.lines) body += `<p>${line}</p>`;
+        blocks.push({ kind: "heading", text: sec.name });
+        for (const line of sec.lines) blocks.push({ kind: "para", text: line });
       }
     }
-    return body;
+    return blocks;
   };
-
-  const resumeCSS = `@page{margin:0.5in 0.65in}
-*{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'Segoe UI','Helvetica Neue',Arial,sans-serif;font-size:10.5pt;line-height:1.45;color:#1a1a1a;max-width:100%}
-.header{text-align:center;margin-bottom:10px;padding-bottom:8px;border-bottom:2px solid #028FA2}
-.header h1{font-size:18pt;font-weight:700;color:#0a2540;margin-bottom:2px}
-.header .contact{font-size:9pt;color:#425466}
-h2{font-size:9.5pt;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;color:#028FA2;border-bottom:1px solid #d1d5db;padding-bottom:2px;margin:12px 0 6px}
-.entry-header{display:flex;justify-content:space-between;align-items:baseline;margin:6px 0 2px}
-.entry-left{font-size:10.5pt}
-.entry-title{font-weight:700;color:#0a2540}
-.entry-org{color:#425466}
-.entry-right{font-size:9pt;color:#6b7280;text-align:right;white-space:nowrap}
-ul{padding-left:16px;margin:2px 0 6px}
-li{font-size:10pt;margin:1px 0;list-style-type:disc;color:#1a1a1a}
-p{margin:2px 0;font-size:10.5pt}
-@media print{body{padding:0}h2{break-after:avoid}.entry-header{break-after:avoid}}`;
-
-  const downloadPDF = () => {
-    if (sections.length === 0 && !result?.tailored_resume) return;
-    let htmlBody = "";
-    if (sections.length > 0) {
-      htmlBody = buildResumeHTML();
-    } else {
-      // Fallback to plain text parsing
-      const lines = (result.tailored_resume || "").split("\n");
-      for (const line of lines) {
-        const t = line.trim();
-        if (!t) { htmlBody += "<br/>"; continue; }
-        if (/^[A-Z][A-Z\s&/,]{3,}$/.test(t)) htmlBody += `<h2>${t}</h2>`;
-        else if (t.startsWith("- ") || t.startsWith("• ")) htmlBody += `<li>${t.replace(/^[-•]\s*/, "")}</li>`;
-        else htmlBody += `<p>${t}</p>`;
-      }
-    }
-    const html = `<!DOCTYPE html><html><head><title>Tailored Resume</title><style>${resumeCSS}</style></head><body>${htmlBody}</body></html>`;
-    const win = window.open("", "_blank");
-    if (win) { win.document.write(html); win.document.close(); setTimeout(() => win.print(), 400); }
+  const resumeName = () => {
+    const name = sections.find((x: any) => x.type === "header")?.lines?.[0];
+    return safeFileName(name, "Resume", fileBase);
   };
+  const hasResume = sections.length > 0 || !!result?.tailored_resume;
+  const onPDF = () => { if (!hasResume) return; try { exportPDF(resumeName(), buildBlocks()); } catch (e: any) { toast.error(e.message); } };
+  const onWord = () => { if (hasResume) downloadWord(resumeName(), buildBlocks()).catch((e) => toast.error(e.message)); };
 
   const copyToClipboard = () => {
     if (!result?.tailored_resume) return;
@@ -568,8 +537,11 @@ p{margin:2px 0;font-size:10.5pt}
           <button onClick={copyToClipboard} className="glass-btn flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-md">
             <Copy className="h-3 w-3" /> Copy
           </button>
-          <button onClick={downloadPDF} className="glass-btn-primary flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-md">
-            <Download className="h-3 w-3" /> Download PDF
+          <button onClick={onPDF} className="glass-btn-primary flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-md" title="Opens the print dialog. Choose Save as PDF.">
+            <Download className="h-3 w-3" /> PDF
+          </button>
+          <button onClick={onWord} className="glass-btn-primary flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-md" title="Editable Word document (.docx)">
+            <Download className="h-3 w-3" /> Word
           </button>
           <button onClick={onRun} className="glass-btn flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-md">Re-generate</button>
         </div>
@@ -608,7 +580,7 @@ p{margin:2px 0;font-size:10.5pt}
       <div className="border border-white/10 rounded-xl overflow-hidden shadow-sm">
         <div className="bg-white/[0.04] px-4 py-2 border-b border-white/10 flex items-center justify-between">
           <span className="text-xs font-semibold text-[#888] uppercase">Resume Preview</span>
-          <span className="text-[0.667rem] text-[#555]">Click "Download PDF" to save</span>
+          <span className="text-[0.667rem] text-[#555]">Download as PDF, or as Word to keep editing</span>
         </div>
         <div className="bg-[#1a1a1a] px-10 py-8 max-h-[650px] overflow-y-auto">
           {sections.length > 0 ? (
@@ -672,7 +644,7 @@ p{margin:2px 0;font-size:10.5pt}
 }
 
 // ─── Cover Letter Tab ────────────────────────────────────────────────────────
-function CoverLetterTab({ result, loading, onRun }: { result: string; loading: boolean; onRun: () => void }) {
+function CoverLetterTab({ result, loading, onRun, fileBase }: { result: string; loading: boolean; onRun: () => void; fileBase: string }) {
   if (!result && !loading) {
     return (
       <div className="text-center py-8">
@@ -691,6 +663,12 @@ function CoverLetterTab({ result, loading, onRun }: { result: string; loading: b
         <div className="flex items-center gap-2">
           <button onClick={() => { navigator.clipboard.writeText(result); toast.success("Copied!"); }} className="glass-btn flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-md">
             <Copy className="h-3.5 w-3.5" /> Copy
+          </button>
+          <button onClick={() => { try { exportPDF(fileBase, textToBlocks(result)); } catch (e: any) { toast.error(e.message); } }} className="glass-btn-primary flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-md" title="Opens the print dialog. Choose Save as PDF.">
+            <Download className="h-3.5 w-3.5" /> PDF
+          </button>
+          <button onClick={() => downloadWord(fileBase, textToBlocks(result)).catch((e) => toast.error(e.message))} className="glass-btn-primary flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-md" title="Editable Word document (.docx)">
+            <Download className="h-3.5 w-3.5" /> Word
           </button>
           <button onClick={onRun} className="glass-btn flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-md">Re-generate</button>
         </div>
