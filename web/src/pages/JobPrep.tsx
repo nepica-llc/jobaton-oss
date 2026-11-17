@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from "react-router-dom";
 import { ArrowLeft, ArrowRight, ScanSearch, FileText, Mail, MessageSquare, Loader2, Copy, Sparkles, Check, X, Download, BookOpen, Volume2, VolumeX } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
+import LetterPaper from "@/components/LetterPaper";
 import { downloadPDF as exportPDF, downloadWord, textToBlocks, safeFileName, type DocBlock } from "@/lib/exportDoc";
 
 const MOTIVATIONAL_QUOTES = [
@@ -673,7 +674,7 @@ function CoverLetterTab({ result, loading, onRun, fileBase }: { result: string; 
           <button onClick={onRun} className="glass-btn flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-md">Re-generate</button>
         </div>
       </div>
-      <div className="whitespace-pre-wrap text-sm text-[#a1a1aa] bg-white/[0.02] border border-white/[0.06] rounded-lg p-5 max-h-[500px] overflow-y-auto leading-relaxed">{result}</div>
+      <LetterPaper text={result} />
     </div>
   );
 }
