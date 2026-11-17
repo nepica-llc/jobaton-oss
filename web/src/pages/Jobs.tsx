@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { Briefcase, Plus, Trash2, X, ExternalLink, Loader2, Sparkles, ArrowRight, Search, AlertCircle, User, FileText, LayoutGrid, List, ScanSearch, BookOpen, MessageSquare, ChevronUp, ChevronDown } from "lucide-react";
+import { Briefcase, Plus, Trash2, X, ExternalLink, Loader2, Sparkles, ArrowRight, Search, AlertCircle, User, FileText, LayoutGrid, List, ScanSearch, BookOpen, MessageSquare, ChevronUp, ChevronDown, Check } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 
@@ -186,6 +186,35 @@ export default function Jobs() {
   const [jobspyCached, setJobspyCached] = useState(false);
   const [jobspySearchTerm, setJobspySearchTerm] = useState("");
   const [jobspyLocation, setJobspyLocation] = useState("");
+  const [addingUrl, setAddingUrl] = useState<string | null>(null);
+
+  const handleAddFromSearch = async (result: any) => {
+    setAddingUrl(result.url);
+    try {
+      let parsed: any = {};
+      // Pull requirements and a summary out of the description; the job is still added if AI is unavailable.
+      if (result.description) parsed = await api.parseJob(result.description).catch(() => ({}));
+      const job = await api.createJob({
+        title: result.title,
+        company: result.company,
+        location: result.location || "",
+        salary: result.salary || "",
+        url: result.url || "",
+        requirements: parsed.requirements || [],
+        nice_to_have: parsed.nice_to_have || [],
+        description_summary: parsed.description_summary || "",
+        raw_description: result.description || "",
+        status: "saved",
+        resume_id: selectedResumeId || undefined,
+      });
+      setJobs((prev) => [job, ...prev]);
+      toast.success(`Added to My Jobs: ${job.title} at ${job.company}`, { action: { label: "Open", onClick: () => navigate(`/jobs/${job.id}`) } });
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setAddingUrl(null);
+    }
+  };
 
   const handleSearchJobs = async (p?: any) => {
     const prof = p || profile;
@@ -541,11 +570,26 @@ export default function Jobs() {
                         <p className="text-xs text-[#888] mt-0.5">{job.company}{job.location ? ` · ${job.location}` : ""}{job.salary ? ` · ${job.salary}` : ""}</p>
                         {job.description && <p className="text-[0.733rem] text-[#555] mt-1 line-clamp-2">{job.description}</p>}
                       </div>
-                      {job.url && (
-                        <a href={job.url} target="_blank" rel="noopener noreferrer" className="glass-btn px-2.5 py-1 text-[0.667rem] text-[#028FA2] rounded-md font-medium shrink-0 flex items-center gap-1">
-                          <ExternalLink className="h-3 w-3" /> View
-                        </a>
-                      )}
+                      <div className="flex items-center gap-2 shrink-0">
+                        {job.url && (
+                          <a href={job.url} target="_blank" rel="noopener noreferrer" className="glass-btn px-2.5 py-1 text-[0.667rem] text-[#028FA2] rounded-md font-medium flex items-center gap-1">
+                            <ExternalLink className="h-3 w-3" /> View
+                          </a>
+                        )}
+                        {(() => {
+                          const existing = jobs.find((j) => (job.url && j.url === job.url) || (j.title === job.title && j.company === job.company));
+                          if (existing) return (
+                            <button onClick={() => navigate(`/jobs/${existing.id}`)} className="px-2.5 py-1 text-[0.667rem] text-green-400 rounded-md font-medium flex items-center gap-1 border border-green-500/20 bg-green-500/10">
+                              <Check className="h-3 w-3" /> In My Jobs
+                            </button>
+                          );
+                          return (
+                            <button onClick={() => handleAddFromSearch(job)} disabled={addingUrl !== null} className="glass-btn-primary px-2.5 py-1 text-[0.667rem] rounded-md font-medium flex items-center gap-1 disabled:opacity-50">
+                              {addingUrl === job.url ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />} Add to My Jobs
+                            </button>
+                          );
+                        })()}
+                      </div>
                     </div>
                   </div>
                 ))}
