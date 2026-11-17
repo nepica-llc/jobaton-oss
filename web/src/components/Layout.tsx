@@ -1,6 +1,7 @@
 import { NavLink, Outlet, Link } from "react-router-dom";
 import { FileText, Settings, Briefcase, User, ClipboardList, LayoutDashboard, Crown, Sun, Moon } from "lucide-react";
 import { useTheme } from "@/lib/theme";
+import ProfileSwitcher from "./ProfileSwitcher";
 
 const nav = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard" },
@@ -46,6 +47,8 @@ export default function Layout() {
                 </NavLink>
               ))}
             </nav>
+
+            <ProfileSwitcher isDark={isDark} />
 
             {/* Theme toggle */}
             <button

@@ -1,7 +1,7 @@
 import express from "express";
 import cors from "cors";
 import path from "node:path";
-import { readCollection, writeCollection, upsert, remove, getSettings, saveSettings, getById, getProfile, saveProfile, getJobsByStatus } from "./storage.js";
+import { readCollection, upsert, remove, getSettings, saveSettings, getById, getProfile, saveProfile, getJobsByStatus, listProfiles, profileExists, createProfile, renameProfile, deleteProfile } from "./storage.js";
 import OpenAI from "openai";
 import { v4 as uuid } from "uuid";
 
@@ -13,6 +13,44 @@ const HOST = process.env.HOST || "127.0.0.1";
 // UI is served same-origin (Vite proxy in dev, static in Docker), so cross-origin is off unless CORS_ORIGIN is set.
 app.use(cors({ origin: process.env.CORS_ORIGIN?.split(",") ?? false }));
 app.use(express.json({ limit: "10mb" }));
+
+// ---------------------------------------------------------------------------
+// Active profile: the web app sends X-Profile-Id; data routes are scoped to it.
+// ---------------------------------------------------------------------------
+app.use("/api", (req, res, next) => {
+  const pid = req.header("x-profile-id") || "default";
+  // Profile list, settings and health don't depend on the profile, so a stale id must not block them.
+  if (!profileExists(pid) && !/^\/(profiles|settings|health)/.test(req.path)) return res.status(404).json({ ok: false, error: "Profile not found" });
+  res.locals.pid = pid;
+  next();
+});
+const pid = (res: express.Response): string => res.locals.pid;
+
+// ---------------------------------------------------------------------------
+// Profiles (list, create, rename, delete)
+// ---------------------------------------------------------------------------
+app.get("/api/profiles", (_req, res) => {
+  res.json({ ok: true, data: listProfiles() });
+});
+
+app.post("/api/profiles", (req, res) => {
+  const name = String(req.body?.name || "").trim().slice(0, 60);
+  if (!name) return res.status(400).json({ ok: false, error: "Profile name is required" });
+  res.json({ ok: true, data: createProfile(uuid(), name) });
+});
+
+app.put("/api/profiles/:id", (req, res) => {
+  const name = String(req.body?.name || "").trim().slice(0, 60);
+  if (!name) return res.status(400).json({ ok: false, error: "Profile name is required" });
+  if (!renameProfile(req.params.id, name)) return res.status(404).json({ ok: false, error: "Profile not found" });
+  res.json({ ok: true, data: { id: req.params.id, name } });
+});
+
+app.delete("/api/profiles/:id", (req, res) => {
+  if (req.params.id === "default") return res.status(400).json({ ok: false, error: "The default profile cannot be deleted" });
+  deleteProfile(req.params.id);
+  res.json({ ok: true });
+});
 
 // ---------------------------------------------------------------------------
 // Health
@@ -46,29 +84,29 @@ app.post("/api/settings", (req, res) => {
 // Resumes CRUD
 // ---------------------------------------------------------------------------
 app.get("/api/resumes", (_req, res) => {
-  res.json({ ok: true, data: readCollection("resumes") });
+  res.json({ ok: true, data: readCollection("resumes", pid(res)) });
 });
 
 app.get("/api/resumes/:id", (req, res) => {
-  const item = getById("resumes", req.params.id);
+  const item = getById("resumes", req.params.id, pid(res));
   if (!item) return res.status(404).json({ ok: false, error: "Not found" });
   res.json({ ok: true, data: item });
 });
 
 app.post("/api/resumes", (req, res) => {
   const resume = { id: uuid(), ...req.body };
-  upsert("resumes", resume);
+  upsert("resumes", resume, pid(res));
   res.json({ ok: true, data: resume });
 });
 
 app.put("/api/resumes/:id", (req, res) => {
   const resume = { ...req.body, id: req.params.id };
-  upsert("resumes", resume);
+  upsert("resumes", resume, pid(res));
   res.json({ ok: true, data: resume });
 });
 
 app.delete("/api/resumes/:id", (req, res) => {
-  remove("resumes", req.params.id);
+  remove("resumes", req.params.id, pid(res));
   res.json({ ok: true });
 });
 
@@ -76,17 +114,17 @@ app.delete("/api/resumes/:id", (req, res) => {
 // Cover Letters CRUD
 // ---------------------------------------------------------------------------
 app.get("/api/cover-letters", (_req, res) => {
-  res.json({ ok: true, data: readCollection("cover_letters") });
+  res.json({ ok: true, data: readCollection("cover_letters", pid(res)) });
 });
 
 app.post("/api/cover-letters", (req, res) => {
   const cl = { id: uuid(), ...req.body };
-  upsert("cover_letters", cl);
+  upsert("cover_letters", cl, pid(res));
   res.json({ ok: true, data: cl });
 });
 
 app.delete("/api/cover-letters/:id", (req, res) => {
-  remove("cover_letters", req.params.id);
+  remove("cover_letters", req.params.id, pid(res));
   res.json({ ok: true });
 });
 
@@ -94,12 +132,12 @@ app.delete("/api/cover-letters/:id", (req, res) => {
 // Profile
 // ---------------------------------------------------------------------------
 app.get("/api/profile", (_req, res) => {
-  const profile = getProfile();
+  const profile = getProfile(pid(res));
   res.json({ ok: true, data: profile });
 });
 
 app.put("/api/profile", (req, res) => {
-  const saved = saveProfile(req.body);
+  const saved = saveProfile(req.body, pid(res));
   res.json({ ok: true, data: saved });
 });
 
@@ -108,29 +146,29 @@ app.put("/api/profile", (req, res) => {
 // ---------------------------------------------------------------------------
 app.get("/api/jobs", (req, res) => {
   const status = req.query.status as string | undefined;
-  res.json({ ok: true, data: getJobsByStatus(status) });
+  res.json({ ok: true, data: getJobsByStatus(pid(res), status) });
 });
 
 app.get("/api/jobs/:id", (req, res) => {
-  const item = getById("jobs", req.params.id);
+  const item = getById("jobs", req.params.id, pid(res));
   if (!item) return res.status(404).json({ ok: false, error: "Not found" });
   res.json({ ok: true, data: item });
 });
 
 app.post("/api/jobs", (req, res) => {
   const job = { id: uuid(), status: "saved", ...req.body };
-  upsert("jobs", job);
+  upsert("jobs", job, pid(res));
   res.json({ ok: true, data: job });
 });
 
 app.put("/api/jobs/:id", (req, res) => {
   const job = { ...req.body, id: req.params.id };
-  upsert("jobs", job);
+  upsert("jobs", job, pid(res));
   res.json({ ok: true, data: job });
 });
 
 app.delete("/api/jobs/:id", (req, res) => {
-  remove("jobs", req.params.id);
+  remove("jobs", req.params.id, pid(res));
   res.json({ ok: true });
 });
 
@@ -758,6 +796,10 @@ Keep responses concise (2-3 paragraphs max).`;
 // ---------------------------------------------------------------------------
 // Serve frontend in production
 // ---------------------------------------------------------------------------
+app.use("/api", (err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  res.status(err.message === "Not found" ? 404 : 500).json({ ok: false, error: err.message });
+});
+
 if (process.env.NODE_ENV === "production") {
   const staticDir = path.resolve(process.cwd(), "public");
   app.use(express.static(staticDir));

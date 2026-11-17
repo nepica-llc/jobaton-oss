@@ -1,9 +1,20 @@
 const BASE = "/api";
+const PROFILE_KEY = "jobaton_profile";
+
+export function getActiveProfile(): string {
+  try { return localStorage.getItem(PROFILE_KEY) || "default"; } catch { return "default"; }
+}
+
+// Switching profile reloads the app so every page refetches its data for the new profile.
+export function switchProfile(id: string): void {
+  try { localStorage.setItem(PROFILE_KEY, id); } catch { /* private mode: stays on default */ }
+  window.location.reload();
+}
 
 async function request<T = any>(path: string, opts: RequestInit = {}): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     ...opts,
-    headers: { "Content-Type": "application/json", ...opts.headers },
+    headers: { "Content-Type": "application/json", "X-Profile-Id": getActiveProfile(), ...opts.headers },
   });
   const json = await res.json();
   if (!res.ok || !json.ok) throw new Error(json.error || `Request failed: ${res.status}`);
@@ -11,6 +22,15 @@ async function request<T = any>(path: string, opts: RequestInit = {}): Promise<T
 }
 
 export const api = {
+  // Profiles
+  getProfiles: () => request<{ id: string; name: string }[]>("/profiles"),
+  createProfile: (name: string) =>
+    request<{ id: string; name: string }>("/profiles", { method: "POST", body: JSON.stringify({ name }) }),
+  renameProfile: (id: string, name: string) =>
+    request(`/profiles/${id}`, { method: "PUT", body: JSON.stringify({ name }) }),
+  deleteProfile: (id: string) =>
+    request(`/profiles/${id}`, { method: "DELETE" }),
+
   // Settings
   getSettings: () => request("/settings"),
   saveSettings: (data: Record<string, string>) =>
