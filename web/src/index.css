@@ -3,7 +3,8 @@
 @tailwind utilities;
 
 /* ─── Base ─── */
-html { font-size: 15px; }
+/* 125% of the original 15px base. Text sizes are in rem so they all scale with it. */
+html { font-size: 18.75px; }
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;

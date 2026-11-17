@@ -377,7 +377,7 @@ export default function Jobs() {
                         value={job.status}
                         onClick={(e) => e.stopPropagation()}
                         onChange={(e) => handleStatusChange(e, job)}
-                        className={`px-2 py-0.5 rounded-lg text-[10px] font-medium border-0 cursor-pointer ${statusInfo.color}`}
+                        className={`px-2 py-0.5 rounded-lg text-[0.667rem] font-medium border-0 cursor-pointer ${statusInfo.color}`}
                       >
                         {STATUSES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
                       </select>
@@ -387,11 +387,11 @@ export default function Jobs() {
                     </div>
                     <h3 className="text-sm font-semibold text-white truncate group-hover:text-[#028FA2] transition-colors">{job.title}</h3>
                     <p className="text-xs text-[#888] mt-0.5">{job.company}{job.location ? ` · ${job.location}` : ""}</p>
-                    {job.description_summary && <p className="text-[10px] text-[#555] mt-1.5 line-clamp-2">{job.description_summary}</p>}
+                    {job.description_summary && <p className="text-[0.667rem] text-[#555] mt-1.5 line-clamp-2">{job.description_summary}</p>}
                     <div className="flex items-center gap-1.5 mt-auto pt-3 border-t border-white/[0.06]">
                       <PrepDots prep={prep} />
                       {prep.ats?.score && (
-                        <span className={`ml-auto text-[10px] font-bold ${prep.ats.score >= 80 ? "text-green-600" : prep.ats.score >= 60 ? "text-amber-600" : "text-red-600"}`}>{prep.ats.score}%</span>
+                        <span className={`ml-auto text-[0.667rem] font-bold ${prep.ats.score >= 80 ? "text-green-600" : prep.ats.score >= 60 ? "text-amber-600" : "text-red-600"}`}>{prep.ats.score}%</span>
                       )}
                     </div>
                   </div>
@@ -406,14 +406,14 @@ export default function Jobs() {
                   <thead>
                     <tr className="border-b border-white/[0.06]">
                       {([["title", "Job Title"], ["company", "Company"], ["status", "Status"]] as [SortKey, string][]).map(([key, label]) => (
-                        <th key={key} onClick={() => toggleSort(key)} className="px-4 py-3 text-[10px] font-semibold text-[#555] uppercase tracking-wider cursor-pointer hover:text-white transition-colors select-none">
+                        <th key={key} onClick={() => toggleSort(key)} className="px-4 py-3 text-[0.667rem] font-semibold text-[#555] uppercase tracking-wider cursor-pointer hover:text-white transition-colors select-none">
                           <span className="flex items-center gap-1">{label} <SortIcon col={key} /></span>
                         </th>
                       ))}
-                      <th className="px-4 py-3 text-[10px] font-semibold text-[#555] uppercase tracking-wider">Location</th>
-                      <th className="px-4 py-3 text-[10px] font-semibold text-[#555] uppercase tracking-wider">Prep</th>
-                      <th className="px-4 py-3 text-[10px] font-semibold text-[#555] uppercase tracking-wider">ATS</th>
-                      <th className="px-4 py-3 text-[10px] font-semibold text-[#555] uppercase tracking-wider w-8"></th>
+                      <th className="px-4 py-3 text-[0.667rem] font-semibold text-[#555] uppercase tracking-wider">Location</th>
+                      <th className="px-4 py-3 text-[0.667rem] font-semibold text-[#555] uppercase tracking-wider">Prep</th>
+                      <th className="px-4 py-3 text-[0.667rem] font-semibold text-[#555] uppercase tracking-wider">ATS</th>
+                      <th className="px-4 py-3 text-[0.667rem] font-semibold text-[#555] uppercase tracking-wider w-8"></th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-white/[0.04]">
@@ -442,7 +442,7 @@ export default function Jobs() {
                               value={job.status}
                               onClick={(e) => e.stopPropagation()}
                               onChange={(e) => handleStatusChange(e, job)}
-                              className={`px-2 py-0.5 rounded-lg text-[10px] font-medium border-0 cursor-pointer ${statusInfo.color}`}
+                              className={`px-2 py-0.5 rounded-lg text-[0.667rem] font-medium border-0 cursor-pointer ${statusInfo.color}`}
                             >
                               {STATUSES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
                             </select>
@@ -471,7 +471,7 @@ export default function Jobs() {
                 </table>
               </div>
               {/* Row count footer */}
-              <div className="px-4 py-2 border-t border-white/[0.04] text-[10px] text-[#555] flex items-center justify-between">
+              <div className="px-4 py-2 border-t border-white/[0.04] text-[0.667rem] text-[#555] flex items-center justify-between">
                 <span>Showing {filteredJobs.length} of {jobs.length} jobs</span>
                 {searchQuery && <button onClick={() => setSearchQuery("")} className="text-[#028FA2] hover:underline">Clear search</button>}
               </div>
@@ -486,8 +486,8 @@ export default function Jobs() {
           {/* Search controls */}
           <div className="glass-card rounded-lg p-5">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-[13px] font-medium text-white">Find Real Jobs</h3>
-              {jobspyCached && <span className="text-[10px] text-[#555] bg-white/[0.04] border border-white/[0.06] px-2 py-0.5 rounded-md">Cached results</span>}
+              <h3 className="text-[0.867rem] font-medium text-white">Find Real Jobs</h3>
+              {jobspyCached && <span className="text-[0.667rem] text-[#555] bg-white/[0.04] border border-white/[0.06] px-2 py-0.5 rounded-md">Cached results</span>}
             </div>
 
             <div className="flex gap-2 mb-3">
@@ -515,7 +515,7 @@ export default function Jobs() {
                 </button>
               )}
             </div>
-            <p className="text-[10px] text-[#555]">Powered by <a href="https://github.com/speedyapply/JobSpy" target="_blank" rel="noopener noreferrer" className="text-[#028FA2] hover:underline">JobSpy</a>. Scrapes Indeed, LinkedIn, Glassdoor. Results cached for 6 hours.</p>
+            <p className="text-[0.667rem] text-[#555]">Powered by <a href="https://github.com/speedyapply/JobSpy" target="_blank" rel="noopener noreferrer" className="text-[#028FA2] hover:underline">JobSpy</a>. Scrapes Indeed, LinkedIn, Glassdoor. Results cached for 6 hours.</p>
           </div>
 
           {/* Results */}
@@ -535,14 +535,14 @@ export default function Jobs() {
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
-                          <p className="text-[13px] font-medium text-white truncate">{job.title}</p>
-                          {job.site && <span className="text-[9px] text-[#555] bg-white/[0.04] border border-white/[0.06] px-1.5 py-0.5 rounded shrink-0">{job.site}</span>}
+                          <p className="text-[0.867rem] font-medium text-white truncate">{job.title}</p>
+                          {job.site && <span className="text-[0.6rem] text-[#555] bg-white/[0.04] border border-white/[0.06] px-1.5 py-0.5 rounded shrink-0">{job.site}</span>}
                         </div>
                         <p className="text-xs text-[#888] mt-0.5">{job.company}{job.location ? ` · ${job.location}` : ""}{job.salary ? ` · ${job.salary}` : ""}</p>
-                        {job.description && <p className="text-[11px] text-[#555] mt-1 line-clamp-2">{job.description}</p>}
+                        {job.description && <p className="text-[0.733rem] text-[#555] mt-1 line-clamp-2">{job.description}</p>}
                       </div>
                       {job.url && (
-                        <a href={job.url} target="_blank" rel="noopener noreferrer" className="glass-btn px-2.5 py-1 text-[10px] text-[#028FA2] rounded-md font-medium shrink-0 flex items-center gap-1">
+                        <a href={job.url} target="_blank" rel="noopener noreferrer" className="glass-btn px-2.5 py-1 text-[0.667rem] text-[#028FA2] rounded-md font-medium shrink-0 flex items-center gap-1">
                           <ExternalLink className="h-3 w-3" /> View
                         </a>
                       )}

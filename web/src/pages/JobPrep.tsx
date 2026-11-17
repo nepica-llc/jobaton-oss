@@ -403,7 +403,7 @@ function ATSTab({ result, loading, onRun }: { result: any; loading: boolean; onR
               <div key={i} className="border border-white/10 rounded-xl p-3">
                 <div className="flex items-center gap-2 mb-1">
                   <span className="text-sm font-semibold text-white">{gap.skill}</span>
-                  <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded ${gap.importance === "critical" ? "bg-red-100 text-red-700" : gap.importance === "important" ? "bg-amber-100 text-amber-700" : "bg-gray-100 text-gray-600"}`}>{gap.importance}</span>
+                  <span className={`text-[0.6rem] font-bold uppercase px-1.5 py-0.5 rounded ${gap.importance === "critical" ? "bg-red-100 text-red-700" : gap.importance === "important" ? "bg-amber-100 text-amber-700" : "bg-gray-100 text-gray-600"}`}>{gap.importance}</span>
                 </div>
                 <p className="text-xs text-[#888]">{gap.suggestion}</p>
               </div>
@@ -459,7 +459,7 @@ function ATSTab({ result, loading, onRun }: { result: any; loading: boolean; onR
           <div className="space-y-2">
             {result.suggestions.map((s: string, i: number) => (
               <div key={i} className="flex items-start gap-3 p-3 border border-white/10 rounded-xl bg-[#1a1a1a]">
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#028FA2]/10 text-[10px] font-bold text-[#028FA2]">{i + 1}</span>
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#028FA2]/10 text-[0.667rem] font-bold text-[#028FA2]">{i + 1}</span>
                 <p className="text-sm text-[#888]">{s}</p>
               </div>
             ))}
@@ -606,7 +606,7 @@ p{margin:2px 0;font-size:10.5pt}
       <div className="border border-white/10 rounded-xl overflow-hidden shadow-sm">
         <div className="bg-white/[0.04] px-4 py-2 border-b border-white/10 flex items-center justify-between">
           <span className="text-xs font-semibold text-[#888] uppercase">Resume Preview</span>
-          <span className="text-[10px] text-[#555]">Click "Download PDF" to save</span>
+          <span className="text-[0.667rem] text-[#555]">Click "Download PDF" to save</span>
         </div>
         <div className="bg-[#1a1a1a] px-10 py-8 max-h-[650px] overflow-y-auto">
           {sections.length > 0 ? (
@@ -617,7 +617,7 @@ p{margin:2px 0;font-size:10.5pt}
                     <div key={si} className="text-center pb-3 mb-3 border-b-2 border-[#028FA2]">
                       <h1 className="text-xl font-bold text-white">{sec.lines?.[0]}</h1>
                       {sec.lines?.slice(1).map((l: string, li: number) => (
-                        <p key={li} className="text-[10px] text-[#888] mt-0.5">{l}</p>
+                        <p key={li} className="text-[0.667rem] text-[#888] mt-0.5">{l}</p>
                       ))}
                     </div>
                   );
@@ -625,7 +625,7 @@ p{margin:2px 0;font-size:10.5pt}
                 if (sec.entries?.length > 0) {
                   return (
                     <div key={si} className="mt-3">
-                      <h2 className="text-[10px] font-bold uppercase tracking-[1.2px] text-[#028FA2] border-b border-white/10 pb-1 mb-2">{sec.name}</h2>
+                      <h2 className="text-[0.667rem] font-bold uppercase tracking-[1.2px] text-[#028FA2] border-b border-white/10 pb-1 mb-2">{sec.name}</h2>
                       {sec.entries.map((entry: any, ei: number) => (
                         <div key={ei} className="mb-2.5">
                           <div className="flex items-baseline justify-between gap-2">
@@ -633,12 +633,12 @@ p{margin:2px 0;font-size:10.5pt}
                               <span className="text-sm font-bold text-white">{entry.title}</span>
                               {entry.org && <span className="text-sm text-[#888]"> | {entry.org}</span>}
                             </div>
-                            <span className="text-[10px] text-[#555] whitespace-nowrap">{[entry.date, entry.location].filter(Boolean).join(" | ")}</span>
+                            <span className="text-[0.667rem] text-[#555] whitespace-nowrap">{[entry.date, entry.location].filter(Boolean).join(" | ")}</span>
                           </div>
                           {entry.bullets?.length > 0 && (
                             <ul className="mt-0.5 ml-4 space-y-0">
                               {entry.bullets.map((b: string, bi: number) => (
-                                <li key={bi} className="text-[11px] text-[#1a1a1a] list-disc leading-relaxed">{b}</li>
+                                <li key={bi} className="text-[0.733rem] text-[#1a1a1a] list-disc leading-relaxed">{b}</li>
                               ))}
                             </ul>
                           )}
@@ -650,9 +650,9 @@ p{margin:2px 0;font-size:10.5pt}
                 if (sec.lines?.length > 0) {
                   return (
                     <div key={si} className="mt-3">
-                      <h2 className="text-[10px] font-bold uppercase tracking-[1.2px] text-[#028FA2] border-b border-white/10 pb-1 mb-2">{sec.name}</h2>
+                      <h2 className="text-[0.667rem] font-bold uppercase tracking-[1.2px] text-[#028FA2] border-b border-white/10 pb-1 mb-2">{sec.name}</h2>
                       {sec.lines.map((l: string, li: number) => (
-                        <p key={li} className="text-[11px] text-[#1a1a1a] leading-relaxed">{l}</p>
+                        <p key={li} className="text-[0.733rem] text-[#1a1a1a] leading-relaxed">{l}</p>
                       ))}
                     </div>
                   );
@@ -874,7 +874,7 @@ function StudyGuideTab({ result, loading, onRun, jobTitle, jobDescription }: { r
             {completedCount === mod.lessons.length ? <Check className="h-6 w-6" /> : <BookOpen className="h-6 w-6" />}
           </div>
           <div>
-            <p className="text-[10px] uppercase tracking-wider text-[#028FA2] font-bold">Module {openModuleIdx + 1}</p>
+            <p className="text-[0.667rem] uppercase tracking-wider text-[#028FA2] font-bold">Module {openModuleIdx + 1}</p>
             <h3 className="text-lg font-bold text-white">{mod.title}</h3>
             <p className="text-xs text-gray-500">{mod.description}</p>
           </div>
@@ -896,19 +896,19 @@ function StudyGuideTab({ result, loading, onRun, jobTitle, jobDescription }: { r
                 } ${lesson.generating ? "opacity-60 cursor-wait" : ""}`}
               >
                 <div className="absolute -top-2 -left-1.5">
-                  <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[9px] font-bold ${lesson.completed ? "bg-green-500 text-white" : "bg-[#028FA2] text-white"}`}>
+                  <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[0.6rem] font-bold ${lesson.completed ? "bg-green-500 text-white" : "bg-[#028FA2] text-white"}`}>
                     {lesson.completed ? "✓" : li + 1}
                   </span>
                 </div>
                 <div className="flex items-center gap-2 mb-1">
-                  <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase ${
+                  <span className={`text-[0.6rem] px-1.5 py-0.5 rounded-full font-bold uppercase ${
                     lesson.type === "read" ? "bg-[#028FA2]/10 text-[#028FA2]" : lesson.type === "practice" ? "bg-purple-100 text-purple-700" : "bg-amber-100 text-amber-700"
                   }`}>{lesson.type}</span>
-                  {hasContent && <span className="text-[9px] text-green-600 font-medium">✦ Ready</span>}
+                  {hasContent && <span className="text-[0.6rem] text-green-600 font-medium">✦ Ready</span>}
                 </div>
                 <h4 className={`text-sm font-semibold ${lesson.completed ? "line-through opacity-60" : ""}`}>{lesson.title}</h4>
-                <p className="text-[10px] text-gray-500 mt-1">{lesson.duration}</p>
-                {lesson.generating && <span className="text-[10px] text-[#028FA2] animate-pulse mt-1 block">Generating…</span>}
+                <p className="text-[0.667rem] text-gray-500 mt-1">{lesson.duration}</p>
+                {lesson.generating && <span className="text-[0.667rem] text-[#028FA2] animate-pulse mt-1 block">Generating…</span>}
               </button>
             );
           })}
@@ -986,7 +986,7 @@ function StudyGuideTab({ result, loading, onRun, jobTitle, jobDescription }: { r
               className={`group relative text-left rounded-lg border-2 p-4 transition-all hover:scale-[1.02] hover:shadow-lg active:scale-[0.98] ${isModDone ? "border-green-200 bg-green-50/50 opacity-80" : "border-white/10 hover:border-[#028FA2]/40"}`}
             >
               <div className="absolute -top-2 -right-2">
-                <span className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold shadow-sm ${isModDone ? "bg-green-500 text-white" : "bg-[#028FA2] text-white"}`}>
+                <span className={`flex h-6 w-6 items-center justify-center rounded-full text-[0.667rem] font-bold shadow-sm ${isModDone ? "bg-green-500 text-white" : "bg-[#028FA2] text-white"}`}>
                   {isModDone ? "✓" : mi + 1}
                 </span>
               </div>
@@ -996,8 +996,8 @@ function StudyGuideTab({ result, loading, onRun, jobTitle, jobDescription }: { r
                 </div>
                 <div className="flex-1 min-w-0">
                   <h4 className={`text-sm font-semibold ${isModDone ? "line-through" : ""}`}>{mod.title}</h4>
-                  <p className="text-[10px] text-gray-500 mt-0.5 line-clamp-2">{mod.description}</p>
-                  <p className="text-[10px] text-gray-400 mt-1.5">{modCompleted}/{modTotal} lessons</p>
+                  <p className="text-[0.667rem] text-gray-500 mt-0.5 line-clamp-2">{mod.description}</p>
+                  <p className="text-[0.667rem] text-gray-400 mt-1.5">{modCompleted}/{modTotal} lessons</p>
                 </div>
               </div>
               <div className="mt-3 h-1.5 rounded-full bg-gray-100 overflow-hidden">
@@ -1073,7 +1073,7 @@ function LessonPlayerInline({ lesson, moduleTitle, lessonIndex, totalLessons, on
           <ArrowLeft className="h-3.5 w-3.5" /> Back to module
         </button>
         <div className="text-center">
-          <p className="text-[10px] text-[#555]">{moduleTitle} · Lesson {lessonIndex + 1}/{totalLessons}</p>
+          <p className="text-[0.667rem] text-[#555]">{moduleTitle} · Lesson {lessonIndex + 1}/{totalLessons}</p>
           <h3 className="text-sm font-semibold text-white">{lesson.title}</h3>
         </div>
         <div className="w-16" />
@@ -1085,14 +1085,14 @@ function LessonPlayerInline({ lesson, moduleTitle, lessonIndex, totalLessons, on
           <button key={i} onClick={() => setCurrentStep(i)} className={`h-2 flex-1 rounded-full transition-all cursor-pointer ${i < currentStep ? "bg-[#028FA2]" : i === currentStep ? "bg-[#028FA2] scale-y-125 shadow" : "bg-gray-200"}`} />
         ))}
       </div>
-      <p className="text-[10px] text-gray-400">Step {currentStep + 1} of {totalSteps} · {Math.round(((currentStep + 1) / totalSteps) * 100)}%</p>
+      <p className="text-[0.667rem] text-gray-400">Step {currentStep + 1} of {totalSteps} · {Math.round(((currentStep + 1) / totalSteps) * 100)}%</p>
 
       {/* Content */}
       <div className="min-h-[300px]">
         {isOnSection && sections[currentStep] && (
           <div className="space-y-4 animate-fade-in">
             <div className="bg-[#028FA2]/[0.06] p-4 rounded-xl border-l-4 border-[#028FA2]">
-              <p className="text-[10px] uppercase tracking-wider text-[#028FA2] font-bold">Scene {currentStep + 1} of {sections.length}</p>
+              <p className="text-[0.667rem] uppercase tracking-wider text-[#028FA2] font-bold">Scene {currentStep + 1} of {sections.length}</p>
               <h4 className="text-lg font-bold text-white mt-1">{sections[currentStep].heading}</h4>
             </div>
             {sections[currentStep].body.split("\n\n").map((p, pi) => (
@@ -1101,8 +1101,8 @@ function LessonPlayerInline({ lesson, moduleTitle, lessonIndex, totalLessons, on
             {sections[currentStep].codeSnippet && (
               <div className="rounded-xl bg-gray-900 overflow-hidden">
                 <div className="flex items-center justify-between px-4 py-2 bg-gray-800">
-                  <span className="text-[10px] text-gray-400 font-mono uppercase">Code Example</span>
-                  <button onClick={() => { navigator.clipboard.writeText(sections[currentStep].codeSnippet || ""); toast.success("Copied!"); }} className="text-[10px] text-[#028FA2]/70 hover:text-[#028FA2]/70 font-bold">Copy</button>
+                  <span className="text-[0.667rem] text-gray-400 font-mono uppercase">Code Example</span>
+                  <button onClick={() => { navigator.clipboard.writeText(sections[currentStep].codeSnippet || ""); toast.success("Copied!"); }} className="text-[0.667rem] text-[#028FA2]/70 hover:text-[#028FA2]/70 font-bold">Copy</button>
                 </div>
                 <pre className="p-4 text-xs font-mono text-gray-200 whitespace-pre-wrap overflow-x-auto">{sections[currentStep].codeSnippet}</pre>
               </div>
@@ -1119,7 +1119,7 @@ function LessonPlayerInline({ lesson, moduleTitle, lessonIndex, totalLessons, on
         {isOnPractice && (
           <div className="space-y-4 animate-fade-in">
             <div className="bg-purple-500/[0.06] p-4 rounded-xl border-l-4 border-purple-400">
-              <p className="text-[10px] uppercase tracking-wider text-purple-400 font-bold">Hands-On</p>
+              <p className="text-[0.667rem] uppercase tracking-wider text-purple-400 font-bold">Hands-On</p>
               <h4 className="text-lg font-bold text-white mt-1">Practice Exercise</h4>
             </div>
             <div className="p-4 bg-purple-500/[0.06] border border-purple-500/20 rounded-xl">
@@ -1134,7 +1134,7 @@ function LessonPlayerInline({ lesson, moduleTitle, lessonIndex, totalLessons, on
         {isOnQuiz && (
           <div className="space-y-4 animate-fade-in">
             <div className="bg-amber-500/[0.06] p-4 rounded-xl border-l-4 border-amber-400">
-              <p className="text-[10px] uppercase tracking-wider text-amber-400 font-bold">Knowledge Check</p>
+              <p className="text-[0.667rem] uppercase tracking-wider text-amber-400 font-bold">Knowledge Check</p>
               <h4 className="text-lg font-bold text-white mt-1">Quiz</h4>
             </div>
             {quiz.map((q, qi) => (
@@ -1150,7 +1150,7 @@ function LessonPlayerInline({ lesson, moduleTitle, lessonIndex, totalLessons, on
                     else if (!quizSubmitted && selected) cls = "border-[#028FA2]/60 bg-[#028FA2]/10";
                     return (
                       <button key={oi} onClick={() => !quizSubmitted && setQuizAnswers((p) => ({ ...p, [qi]: oi }))} className={`w-full text-left flex items-center gap-2.5 px-3 py-2 rounded-lg border-2 transition-all text-xs ${cls}`}>
-                        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-gray-100 text-[9px] font-bold">{String.fromCharCode(65 + oi)}</span>
+                        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-gray-100 text-[0.6rem] font-bold">{String.fromCharCode(65 + oi)}</span>
                         <span>{opt}</span>
                         {quizSubmitted && isCorrect && <Check className="h-3.5 w-3.5 text-green-500 ml-auto" />}
                         {quizSubmitted && selected && !isCorrect && <X className="h-3.5 w-3.5 text-red-500 ml-auto" />}
@@ -1369,12 +1369,12 @@ function InterviewTab({ result, loading, onRun, jobTitle, jobDescription }: { re
               return (
                 <div key={i} className={`px-4 py-3 ${isCorrect ? "bg-green-50/50" : wasSkipped ? "bg-white/[0.04]" : "bg-red-50/50"}`}>
                   <div className="flex items-start gap-2">
-                    <span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[9px] font-bold text-white ${isCorrect ? "bg-green-500" : wasSkipped ? "bg-gray-400" : "bg-red-500"}`}>
+                    <span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[0.6rem] font-bold text-white ${isCorrect ? "bg-green-500" : wasSkipped ? "bg-gray-400" : "bg-red-500"}`}>
                       {isCorrect ? "✓" : wasSkipped ? "-" : "✗"}
                     </span>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-white">{q.question}</p>
-                      <span className={`inline-block mt-1 text-[9px] font-bold uppercase px-1.5 py-0.5 rounded ${q.difficulty === "easy" ? "bg-green-100 text-green-700" : q.difficulty === "hard" ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"}`}>{q.difficulty}</span>
+                      <span className={`inline-block mt-1 text-[0.6rem] font-bold uppercase px-1.5 py-0.5 rounded ${q.difficulty === "easy" ? "bg-green-100 text-green-700" : q.difficulty === "hard" ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"}`}>{q.difficulty}</span>
                       {q.explanation && <p className="text-xs text-[#888] mt-1">{q.explanation}</p>}
                     </div>
                   </div>
@@ -1406,10 +1406,10 @@ function InterviewTab({ result, loading, onRun, jobTitle, jobDescription }: { re
           <div className="flex items-center gap-3">
             <div className={`h-2.5 w-2.5 rounded-full ${timeLeft > 10 ? "bg-green-400 animate-pulse" : "bg-red-400 animate-pulse"}`} />
             <span className="text-sm font-mono font-bold">{formatTime(timeLeft)}</span>
-            <span className="text-[10px] text-gray-400 border-l border-gray-600 pl-3">Total: {formatTime(totalTime)}</span>
+            <span className="text-[0.667rem] text-gray-400 border-l border-gray-600 pl-3">Total: {formatTime(totalTime)}</span>
           </div>
           <div className="flex items-center gap-3">
-            <span className={`text-[9px] font-bold uppercase px-2 py-0.5 rounded ${diffBg} ${diffColor}`}>{q?.difficulty}</span>
+            <span className={`text-[0.6rem] font-bold uppercase px-2 py-0.5 rounded ${diffBg} ${diffColor}`}>{q?.difficulty}</span>
             <span className="text-xs text-gray-300">Q{currentQ + 1}/{questions.length}</span>
           </div>
         </div>
@@ -1493,7 +1493,7 @@ function InterviewTab({ result, loading, onRun, jobTitle, jobDescription }: { re
           <div key={round} className={`p-4 rounded-xl border text-center ${color}`}>
             <p className={`text-xl font-bold ${iconColor}`}>{parsed[round].length}</p>
             <p className="text-xs font-semibold text-white">{label}</p>
-            <p className="text-[10px] text-[#555] mt-0.5">{desc}</p>
+            <p className="text-[0.667rem] text-[#555] mt-0.5">{desc}</p>
           </div>
         ))}
       </div>
