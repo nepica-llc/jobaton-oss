@@ -93,7 +93,8 @@ def search_jobs(
                 "salary": str(row.get("min_amount", "")) if row.get("min_amount") else "",
                 "date_posted": str(row.get("date_posted", "")),
                 "site": str(row.get("site", "")),
-                "description": str(row.get("description", ""))[:500],
+                # Full text: jobs added from search use it for ATS, tailoring and cover letters.
+                "description": str(row.get("description", ""))[:20000],
             }
             # Clean up NaN values
             job = {k: (v if v != "nan" and v != "None" else "") for k, v in job.items()}
