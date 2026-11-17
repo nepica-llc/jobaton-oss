@@ -1,0 +1,25 @@
+name: Docker Hub description
+
+# Syncs DOCKERHUB.md to the Docker Hub "Overview" tab of nepica/jobaton.
+# Needs a Docker Hub token with Read, Write, Delete scope.
+
+on:
+  push:
+    branches: [main]
+    paths: [DOCKERHUB.md, .github/workflows/dockerhub-description.yml]
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Update Docker Hub description
+        uses: peter-evans/dockerhub-description@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          repository: nepica/jobaton
+          readme-filepath: ./DOCKERHUB.md
+          short-description: "Self-hosted, open-source job search toolkit powered by your own AI key"
