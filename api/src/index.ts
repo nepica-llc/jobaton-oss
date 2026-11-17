@@ -694,69 +694,76 @@ Rules:
 // ---------------------------------------------------------------------------
 // AI: Interview Prep
 // ---------------------------------------------------------------------------
+const INTERVIEW_STAGES: Record<string, { name: string; focus: string }> = {
+  recruiter: {
+    name: "Recruiter screen",
+    focus: "a first call with a recruiter or talent partner: motivation, background walkthrough, role and company fit, salary expectations, notice period, work authorization, and how to talk about the role at a high level. Light on deep technical detail.",
+  },
+  hiring_manager: {
+    name: "Hiring manager",
+    focus: "a call with the hiring manager: past impact, ownership, prioritization, stakeholder management, handling conflict and failure, how the candidate would approach the first 90 days, and situational judgement for this team.",
+  },
+  technical: {
+    name: "Technical",
+    focus: "a technical round with engineers or specialists: core concepts, tools and practices from the job description, troubleshooting scenarios, design trade-offs and hands-on problem solving at the level this role needs.",
+  },
+  final: {
+    name: "Final / culture",
+    focus: "a final round with senior leaders or a panel: values and culture fit, strategic thinking, cross-team collaboration, leadership, long-term goals, and good questions to ask the company.",
+  },
+};
+
 app.post("/api/ai/interview-prep", async (req, res) => {
   try {
-    const { jobTitle, company, jobDescription, apiKey } = req.body;
+    const { jobTitle, company, jobDescription, stage = "technical", interviewer, apiKey } = req.body;
+    const stageInfo = INTERVIEW_STAGES[stage];
+    if (!stageInfo) return res.status(400).json({ ok: false, error: "Unknown interview stage" });
+    const interviewerText = typeof interviewer === "string" ? interviewer.trim().slice(0, 6000) : "";
     const ai = getAIClient(apiKey);
     if (!ai) {
       return res.status(400).json({ ok: false, error: "No API key configured." });
     }
-    const systemPrompt = `You are an interview preparation coach. Generate comprehensive interview preparation with EXACTLY 30 multiple-choice questions organized by difficulty.
+    const systemPrompt = `You are an interview preparation coach. Prepare the candidate for ONE specific interview round: ${stageInfo.name}, which is ${stageInfo.focus}
+
+Generate EXACTLY 12 multiple-choice questions for this round only, ordered from easier to harder.${interviewerText ? `
+
+The candidate shared their interviewer's public profile. Use it to tailor the round: lean toward topics from the interviewer's background, current role and interests, and phrase questions the way someone in that position would ask them. Do not invent facts about the interviewer beyond what the profile says.` : ""}
 
 Output as JSON:
 {
-  "overview": "Brief role assessment and what to expect in the interview",
+  "overview": "2 to 3 sentences on what this round is for and what the interviewer will look for",
+  "interviewerInsights": ${interviewerText ? `["3 to 5 short points on what this interviewer is likely to care about, based on their profile"]` : "[]"},
   "rounds": [
     {
-      "name": "Easy Round",
-      "difficulty": "easy",
-      "description": "Foundational concepts and basic knowledge",
-      "duration": "10 minutes",
+      "name": "${stageInfo.name}",
       "questions": [
-        { "question": "Clear question text?", "options": [{"label": "Answer A", "correct": true}, {"label": "Answer B", "correct": false}, {"label": "Answer C", "correct": false}, {"label": "Answer D", "correct": false}], "explanation": "Why the correct answer is right", "timeLimit": 30 }
+        { "question": "Clear question text?", "difficulty": "easy", "options": [{"label": "Answer A", "correct": true}, {"label": "Answer B", "correct": false}, {"label": "Answer C", "correct": false}, {"label": "Answer D", "correct": false}], "explanation": "Why the correct answer is the best response", "timeLimit": 120 }
       ]
-    },
-    {
-      "name": "Medium Round",
-      "difficulty": "medium",
-      "description": "Applied knowledge and scenario-based questions",
-      "duration": "15 minutes",
-      "questions": [ ...same format, 10 questions... ]
-    },
-    {
-      "name": "Hard Round",
-      "difficulty": "hard",
-      "description": "Advanced concepts, system design, and complex problem-solving",
-      "duration": "20 minutes",
-      "questions": [ ...same format, 10 questions... ]
     }
   ],
-  "tips": ["tip1", "tip2", "tip3"]
+  "tips": ["3 to 5 tips specific to this round"]
 }
 
 CRITICAL RULES:
-- EXACTLY 3 rounds: Easy, Medium, Hard
-- EXACTLY 10 questions per round (30 total)
+- EXACTLY 12 questions in the single round: 4 easy, 4 medium, 4 hard, with "difficulty" set on each
 - Every question MUST have exactly 4 options with ONE correct answer marked
 - Each option MUST be an object with "label" (string) and "correct" (boolean)
-- Include "explanation" for each question explaining the correct answer
-- Easy questions: definitions, basic concepts, simple recall
-- Medium questions: application, scenarios, "what would you do" situations
-- Hard questions: system design, architecture decisions, complex trade-offs, debugging scenarios
-- Questions should mix technical and behavioral relevant to the role
-- timeLimit: 120 for easy, 180 for medium, 300 for hard (in seconds)`;
+- For behavioral and situational questions, the options are possible responses and the correct one is the strongest response
+- Include "explanation" for each question
+- timeLimit: 120 for easy, 180 for medium, 300 for hard (in seconds)
+- Keep every question relevant to this round and this job`;
     const completion = await ai.client.chat.completions.create({
       model: ai.model,
       messages: [
         { role: "system", content: systemPrompt },
-        { role: "user", content: `JOB TITLE: ${jobTitle}\nCOMPANY: ${company || "Not specified"}\n\nJOB DESCRIPTION:\n${jobDescription}` },
+        { role: "user", content: `JOB TITLE: ${jobTitle}\nCOMPANY: ${company || "Not specified"}\n\nJOB DESCRIPTION:\n${jobDescription}${interviewerText ? `\n\nINTERVIEWER PROFILE (pasted by the candidate):\n${interviewerText}` : ""}` },
       ],
       temperature: 0.5,
-      max_tokens: 8000,
+      max_tokens: 6000,
       response_format: { type: "json_object" },
     });
     const content = noDash(completion.choices[0]?.message?.content || "{}");
-    res.json({ ok: true, data: JSON.parse(content), usage: completion.usage });
+    res.json({ ok: true, data: { ...JSON.parse(content), stage, hasInterviewer: !!interviewerText }, usage: completion.usage });
   } catch (err: any) {
     console.error("[ai/interview-prep]", err.message);
     res.status(500).json({ ok: false, error: err.message });

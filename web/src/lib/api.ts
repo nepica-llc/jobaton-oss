@@ -86,8 +86,8 @@ export const api = {
     request("/ai/study-content", { method: "POST", body: JSON.stringify({ mode, topic, moduleTitle, jobTitle, jobDescription }) }),
   generateLesson: (skill: string, jobTitle: string, company: string, lessonTitle: string, lessonType: string, allLessonTitles: string[]) =>
     request("/ai/generate-lesson", { method: "POST", body: JSON.stringify({ skill, jobTitle, company, lessonTitle, lessonType, allLessonTitles }) }),
-  interviewPrep: (jobTitle: string, company: string, jobDescription: string) =>
-    request("/ai/interview-prep", { method: "POST", body: JSON.stringify({ jobTitle, company, jobDescription }) }),
+  interviewPrep: (jobTitle: string, company: string, jobDescription: string, stage: string, interviewer?: string) =>
+    request("/ai/interview-prep", { method: "POST", body: JSON.stringify({ jobTitle, company, jobDescription, stage, interviewer }) }),
   mockInterview: (jobTitle: string, jobDescription: string, resumeText: string, messages: any[]) =>
     request("/ai/mock-interview", { method: "POST", body: JSON.stringify({ jobTitle, jobDescription, resumeText, messages }) }),
   chat: (messages: any[], model?: string) =>

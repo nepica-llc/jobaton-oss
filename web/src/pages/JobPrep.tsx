@@ -168,12 +168,14 @@ export default function JobPrep() {
     finally { stopLoading(); }
   };
 
-  const runInterviewPrep = async () => {
+  const runInterviewPrep = async (stage: string, interviewer: string) => {
     startLoading("interview");
     try {
-      const result = await api.interviewPrep(job.title || "", job.company || "", job.raw_description || "");
-      setInterviewResult(result);
-      await persistPrep({ interview: result });
+      const result = await api.interviewPrep(job.title || "", job.company || "", job.raw_description || "", stage, interviewer || undefined);
+      const prev = normalizeInterview(interviewResult);
+      const merged = { stages: { ...prev, [stage]: { ...result, interviewer: interviewer || "" } } };
+      setInterviewResult(merged);
+      await persistPrep({ interview: merged });
     } catch (err: any) { toast.error(err.message); }
     finally { stopLoading(); }
   };
@@ -1214,47 +1216,63 @@ function LessonPlayerInline({ lesson, moduleTitle, lessonIndex, totalLessons, on
   );
 }
 
-// ─── Interview Prep Tab - Timed Interview Zone ──────────────────────────────
-function InterviewTab({ result, loading, onRun, jobTitle, jobDescription }: { result: any; loading: boolean; onRun: () => void; jobTitle?: string; jobDescription?: string }) {
+// ─── Interview Prep Tab - one practice set per interview stage ──────────────
+const INTERVIEW_STAGES = [
+  { key: "recruiter", label: "Recruiter screen", desc: "Motivation, background, fit, salary and logistics." },
+  { key: "hiring_manager", label: "Hiring manager", desc: "Impact, ownership, judgement and how you would work on the team." },
+  { key: "technical", label: "Technical", desc: "Core skills, tools, scenarios and trade-offs from the job description." },
+  { key: "final", label: "Final / culture", desc: "Values, leadership, long-term goals and questions for the company." },
+];
+
+// Interview prep saved before stages existed is kept as a "General" set.
+function normalizeInterview(result: any): Record<string, any> {
+  if (!result) return {};
+  const data = result?.content ? (() => { try { return JSON.parse(result.content); } catch { return result; } })() : result;
+  if (data?.stages) return data.stages;
+  if (data?.rounds) return { general: data };
+  return {};
+}
+
+function parseStageQuestions(data: any) {
+  const all: any[] = [];
+  data?.rounds?.forEach((round: any) => {
+    const roundDiff = round.difficulty || (round.name?.toLowerCase()?.includes("easy") ? "easy" : round.name?.toLowerCase()?.includes("hard") ? "hard" : "medium");
+    (round?.questions || []).forEach((q: any) => {
+      if (!q.question) return;
+      const diff = ["easy", "medium", "hard"].includes(q.difficulty) ? q.difficulty : roundDiff;
+      const defaultTime = diff === "easy" ? 120 : diff === "hard" ? 300 : 180;
+      const opts = q.options?.map ? q.options.map((o: any) => typeof o === "string" ? { label: o, correct: false } : o) : [
+        { label: q.sampleAnswer || "Best answer", correct: true },
+        { label: "Not sure", correct: false },
+        { label: "Irrelevant answer", correct: false },
+        { label: "Partially correct", correct: false },
+      ];
+      if (!opts.some((o: any) => o.correct)) opts[0].correct = true;
+      all.push({ question: q.question, options: opts, timeLimit: q.timeLimit || defaultTime, difficulty: diff, explanation: q.explanation || "" });
+    });
+  });
+  const order: Record<string, number> = { easy: 0, medium: 1, hard: 2 };
+  all.sort((a, b) => order[a.difficulty] - order[b.difficulty]);
+  return { all, overview: data?.overview || "", tips: (data?.tips || []) as string[], insights: (data?.interviewerInsights || []) as string[] };
+}
+
+function InterviewTab({ result, loading, onRun }: { result: any; loading: boolean; onRun: (stage: string, interviewer: string) => void; jobTitle?: string; jobDescription?: string }) {
+  const stages = normalizeInterview(result);
+  const tabs = [...(stages.general ? [{ key: "general", label: "General", desc: "Your earlier interview prep." }] : []), ...INTERVIEW_STAGES];
+  const [stage, setStage] = useState<string>(() => tabs.find((t) => stages[t.key])?.key || "recruiter");
+  const [interviewer, setInterviewer] = useState<Record<string, string>>(() =>
+    Object.fromEntries(Object.entries(stages).map(([k, v]: [string, any]) => [k, v?.interviewer || ""])));
   const [mode, setMode] = useState<"lobby" | "zone" | "review">("lobby");
   const [currentQ, setCurrentQ] = useState(0);
   const [answers, setAnswers] = useState<Record<number, number>>({});
   const [timeLeft, setTimeLeft] = useState(0);
   const [totalTime, setTotalTime] = useState(0);
-  const [selectedRound, setSelectedRound] = useState<"all" | "easy" | "medium" | "hard">("all");
   const [showExplanation, setShowExplanation] = useState(false);
 
-  // Parse questions from interview result
-  const parseQuestions = useCallback(() => {
-    if (!result) return { all: [] as any[], easy: [] as any[], medium: [] as any[], hard: [] as any[], overview: "", tips: [] as string[] };
-    const data = result?.content ? (() => { try { return JSON.parse(result.content); } catch { return result; } })() : result;
-    const easy: any[] = [];
-    const medium: any[] = [];
-    const hard: any[] = [];
-    data?.rounds?.forEach((round: any) => {
-      const diff = round.difficulty || (round.name?.toLowerCase()?.includes("easy") ? "easy" : round.name?.toLowerCase()?.includes("hard") ? "hard" : "medium");
-      const defaultTime = diff === "easy" ? 120 : diff === "hard" ? 300 : 180;
-      (round?.questions || []).forEach((q: any) => {
-        if (!q.question) return;
-        const opts = q.options?.map ? q.options.map((o: any) => typeof o === "string" ? { label: o, correct: false } : o) : [
-          { label: q.sampleAnswer || "Best answer", correct: true },
-          { label: "Not sure", correct: false },
-          { label: "Irrelevant answer", correct: false },
-          { label: "Partially correct", correct: false },
-        ];
-        // Ensure at least one correct
-        if (!opts.some((o: any) => o.correct)) opts[0].correct = true;
-        const entry = { question: q.question, options: opts, timeLimit: q.timeLimit || defaultTime, difficulty: diff, explanation: q.explanation || "" };
-        if (diff === "easy") easy.push(entry);
-        else if (diff === "hard") hard.push(entry);
-        else medium.push(entry);
-      });
-    });
-    return { all: [...easy, ...medium, ...hard], easy, medium, hard, overview: data?.overview || "", tips: data?.tips || [] };
-  }, [result]);
-
-  const parsed = parseQuestions();
-  const questions = selectedRound === "all" ? parsed.all : parsed[selectedRound];
+  const stageData = stages[stage];
+  const stageInfo = tabs.find((t) => t.key === stage)!;
+  const parsed = parseStageQuestions(stageData);
+  const questions = parsed.all;
 
   // Timer per question
   useEffect(() => {
@@ -1298,8 +1316,7 @@ function InterviewTab({ result, loading, onRun, jobTitle, jobDescription }: { re
     }
   };
 
-  const startInterview = (round: "all" | "easy" | "medium" | "hard") => {
-    setSelectedRound(round);
+  const startInterview = () => {
     setCurrentQ(0);
     setAnswers({});
     setTotalTime(0);
@@ -1308,16 +1325,7 @@ function InterviewTab({ result, loading, onRun, jobTitle, jobDescription }: { re
 
   const formatTime = (s: number) => `${Math.floor(s / 60).toString().padStart(2, "0")}:${(s % 60).toString().padStart(2, "0")}`;
 
-  if (!result && !loading) {
-    return (
-      <div className="text-center py-8">
-        <MessageSquare className="h-8 w-8 text-gray-300 mx-auto mb-2" />
-        <p className="text-sm text-gray-500 mb-3">Generate interview questions across multiple difficulty levels with a timed interview zone</p>
-        <button onClick={onRun} className="px-4 py-2 bg-[#028FA2] text-white text-sm font-medium rounded-lg hover:bg-[#027a8c]">Generate Interview Prep</button>
-      </div>
-    );
-  }
-  if (loading) return <LoadingState text="Preparing interview questions..." />;
+  if (loading) return <LoadingState text={`Preparing ${stageInfo.label.toLowerCase()} questions...`} />;
 
   // ─── REVIEW MODE ───
   if (mode === "review") {
@@ -1328,10 +1336,9 @@ function InterviewTab({ result, loading, onRun, jobTitle, jobDescription }: { re
     const skipped = Object.entries(answers).filter(([, ai]) => Number(ai) === -1).length;
     const score = Math.round((correct / questions.length) * 100);
     const byDifficulty = (diff: string) => {
-      const qs = questions.filter((q: any) => q.difficulty === diff);
       const indices = questions.map((q: any, i: number) => q.difficulty === diff ? i : -1).filter((i: number) => i >= 0);
       const c = indices.filter((i: number) => questions[i]?.options[answers[i]]?.correct).length;
-      return { total: qs.length, correct: c };
+      return { total: indices.length, correct: c };
     };
 
     return (
@@ -1340,7 +1347,7 @@ function InterviewTab({ result, loading, onRun, jobTitle, jobDescription }: { re
           <div className="flex h-16 w-16 mx-auto items-center justify-center rounded-lg bg-[#1a1a1a] shadow-lg mb-3">
             <Check className="h-8 w-8 text-[#028FA2]" />
           </div>
-          <h3 className="text-xl font-bold text-white">Interview Complete!</h3>
+          <h3 className="text-xl font-bold text-white">{stageInfo.label} complete</h3>
           <p className="text-3xl font-bold text-[#028FA2] mt-2">{score}%</p>
           <p className="text-sm text-[#888] mt-1">{correct}/{questions.length} correct · {skipped} skipped · {formatTime(totalTime)} total</p>
         </div>
@@ -1385,14 +1392,14 @@ function InterviewTab({ result, loading, onRun, jobTitle, jobDescription }: { re
         </details>
 
         <div className="flex gap-3">
-          <button onClick={() => { setMode("lobby"); setCurrentQ(0); setAnswers({}); }} className="flex-1 px-4 py-2.5 text-sm font-medium text-[#888] bg-white/[0.04] border border-white/10 rounded-xl hover:bg-gray-100">Back to Lobby</button>
-          <button onClick={() => startInterview(selectedRound)} className="flex-1 px-4 py-2.5 text-sm font-medium text-white bg-[#028FA2] rounded-xl hover:bg-[#027a8c]">Retake</button>
+          <button onClick={() => { setMode("lobby"); setCurrentQ(0); setAnswers({}); }} className="flex-1 px-4 py-2.5 text-sm font-medium text-[#888] bg-white/[0.04] border border-white/10 rounded-xl hover:bg-gray-100">Back to rounds</button>
+          <button onClick={startInterview} className="flex-1 px-4 py-2.5 text-sm font-medium text-white bg-[#028FA2] rounded-xl hover:bg-[#027a8c]">Retake</button>
         </div>
       </div>
     );
   }
 
-  // ─── INTERVIEW ZONE (fullscreen-like timed mode) ───
+  // ─── INTERVIEW ZONE (timed mode) ───
   if (mode === "zone" && questions.length > 0) {
     const q = questions[currentQ];
     const selected = answers[currentQ];
@@ -1401,7 +1408,6 @@ function InterviewTab({ result, loading, onRun, jobTitle, jobDescription }: { re
 
     return (
       <div className="space-y-4">
-        {/* Interview zone header bar */}
         <div className="flex items-center justify-between p-3 bg-[#0a2540] rounded-xl text-white">
           <div className="flex items-center gap-3">
             <div className={`h-2.5 w-2.5 rounded-full ${timeLeft > 10 ? "bg-green-400 animate-pulse" : "bg-red-400 animate-pulse"}`} />
@@ -1409,22 +1415,20 @@ function InterviewTab({ result, loading, onRun, jobTitle, jobDescription }: { re
             <span className="text-[0.667rem] text-gray-400 border-l border-gray-600 pl-3">Total: {formatTime(totalTime)}</span>
           </div>
           <div className="flex items-center gap-3">
+            <span className="text-[0.667rem] text-gray-300 hidden sm:inline">{stageInfo.label}</span>
             <span className={`text-[0.6rem] font-bold uppercase px-2 py-0.5 rounded ${diffBg} ${diffColor}`}>{q?.difficulty}</span>
             <span className="text-xs text-gray-300">Q{currentQ + 1}/{questions.length}</span>
           </div>
         </div>
 
-        {/* Timer bar */}
         <div className="h-1.5 rounded-full bg-gray-800/20">
           <div className={`h-full rounded-full transition-all duration-1000 ${timeLeft > 10 ? "bg-[#028FA2]" : "bg-red-500"}`} style={{ width: `${(timeLeft / (q?.timeLimit || 30)) * 100}%` }} />
         </div>
 
-        {/* Question */}
         <div className="p-8 bg-white/[0.02] rounded-lg border border-white/10 text-center min-h-[140px] flex items-center justify-center">
           <h3 className="text-lg font-semibold text-white leading-relaxed">{q?.question}</h3>
         </div>
 
-        {/* Options */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
           {q?.options?.map((opt: any, oi: number) => {
             const isSelected = selected === oi;
@@ -1445,23 +1449,20 @@ function InterviewTab({ result, loading, onRun, jobTitle, jobDescription }: { re
           })}
         </div>
 
-        {/* Explanation after answering */}
         {showExplanation && q?.explanation && (
           <div className="p-3 bg-[#028FA2]/10 border border-[#028FA2]/20 rounded-xl animate-fade-in">
             <p className="text-xs text-white"><strong>Explanation:</strong> {q.explanation}</p>
           </div>
         )}
 
-        {/* Next button */}
         {selected !== undefined && (
           <div className="flex justify-end">
             <button onClick={handleNext} className="flex items-center gap-1.5 px-5 py-2.5 text-sm font-medium text-white bg-[#028FA2] rounded-xl hover:bg-[#027a8c] transition-colors">
-              {currentQ < questions.length - 1 ? <>Next <ArrowRight className="h-3.5 w-3.5" /></> : <>Finish Interview <Check className="h-3.5 w-3.5" /></>}
+              {currentQ < questions.length - 1 ? <>Next <ArrowRight className="h-3.5 w-3.5" /></> : <>Finish round <Check className="h-3.5 w-3.5" /></>}
             </button>
           </div>
         )}
 
-        {/* Progress dots */}
         <div className="flex items-center gap-0.5">
           {questions.map((_: any, i: number) => {
             const a = answers[i];
@@ -1474,63 +1475,116 @@ function InterviewTab({ result, loading, onRun, jobTitle, jobDescription }: { re
     );
   }
 
-  // ─── LOBBY (pre-start) ───
+  // ─── LOBBY: pick a stage, optionally add the interviewer, generate or start ───
+  const interviewerField = stage !== "general" && (
+    <div className="text-left">
+      <label htmlFor="interviewer-profile" className="block text-xs font-medium text-white mb-1">Interviewer's LinkedIn profile (optional)</label>
+      <p className="text-[0.667rem] text-[#555] mb-2">Open their public LinkedIn profile, copy the name, headline, About and Experience sections, and paste them here. Questions will be tailored to their background. It stays on your machine and is only sent to your AI provider.</p>
+      <textarea
+        id="interviewer-profile"
+        value={interviewer[stage] || ""}
+        onChange={(e) => setInterviewer((p) => ({ ...p, [stage]: e.target.value }))}
+        rows={4}
+        maxLength={6000}
+        placeholder={"Jane Doe\nDirector of Identity Engineering at Acme\nAbout: ...\nExperience: ..."}
+        className="glass-input w-full rounded-lg px-3 py-2 text-xs"
+      />
+    </div>
+  );
+
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-white">Interview Zone</h3>
-        <button onClick={onRun} className="text-xs text-[#028FA2] hover:underline">Re-generate</button>
+      <div>
+        <h3 className="text-sm font-semibold text-white">Interview rounds</h3>
+        <p className="text-xs text-[#888] mt-0.5">Practise for each conversation separately. Every round has its own timed question set.</p>
       </div>
 
-      {parsed.overview && <p className="text-sm text-[#888]">{parsed.overview}</p>}
+      {/* Stage picker */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2" role="tablist" aria-label="Interview round">
+        {tabs.map((t) => {
+          const ready = !!stages[t.key];
+          const active = t.key === stage;
+          return (
+            <button key={t.key} role="tab" aria-selected={active} onClick={() => setStage(t.key)}
+              className={`text-left p-3 rounded-xl border transition-all ${active ? "border-[#028FA2]/60 bg-[#028FA2]/10" : "border-white/10 hover:border-[#028FA2]/30"}`}>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-semibold text-white">{t.label}</span>
+                {ready && <Check className="h-3.5 w-3.5 text-green-500 shrink-0" aria-label="Generated" />}
+              </div>
+              <p className="text-[0.667rem] text-[#555] mt-1 line-clamp-2">{t.desc}</p>
+            </button>
+          );
+        })}
+      </div>
 
-      {/* Question stats */}
-      <div className="grid grid-cols-3 gap-3">
-        {[{ round: "easy" as const, label: "Easy", desc: "2 min per question", color: "border-green-200 bg-green-50", iconColor: "text-green-600" },
-          { round: "medium" as const, label: "Medium", desc: "3 min per question", color: "border-amber-200 bg-amber-50", iconColor: "text-amber-600" },
-          { round: "hard" as const, label: "Hard", desc: "5 min per question", color: "border-red-200 bg-red-50", iconColor: "text-red-600" }
-        ].map(({ round, label, desc, color, iconColor }) => (
-          <div key={round} className={`p-4 rounded-xl border text-center ${color}`}>
-            <p className={`text-xl font-bold ${iconColor}`}>{parsed[round].length}</p>
-            <p className="text-xs font-semibold text-white">{label}</p>
-            <p className="text-[0.667rem] text-[#555] mt-0.5">{desc}</p>
+      {!stageData ? (
+        <div className="bg-[#028FA2]/[0.04] rounded-lg border border-[#028FA2]/20 p-6 space-y-4">
+          <div className="text-center">
+            <MessageSquare className="h-7 w-7 text-[#028FA2] mx-auto mb-2" />
+            <h3 className="text-base font-bold text-white">{stageInfo.label}</h3>
+            <p className="text-sm text-[#888] mt-1">{stageInfo.desc} 12 timed multiple-choice questions, easy to hard.</p>
           </div>
-        ))}
-      </div>
-
-      {/* Start buttons */}
-      <div className="bg-[#028FA2]/[0.04] rounded-lg border border-[#028FA2]/20 p-6 text-center">
-        <div className="flex h-14 w-14 mx-auto items-center justify-center rounded-lg bg-[#1a1a1a] shadow-lg mb-3">
-          <MessageSquare className="h-7 w-7 text-[#028FA2]" />
+          {interviewerField}
+          <div className="text-center">
+            <button onClick={() => onRun(stage, interviewer[stage] || "")} className="px-5 py-2.5 bg-[#028FA2] text-white text-sm font-medium rounded-xl hover:bg-[#027a8c]">
+              Generate {stageInfo.label} prep
+            </button>
+          </div>
         </div>
-        <h3 className="text-lg font-bold text-white">Enter Interview Zone</h3>
-        <p className="text-sm text-[#888] mt-1 mb-4">Timed environment. Answer each question before time runs out. No going back.</p>
-        <div className="flex flex-wrap gap-2 justify-center">
-          <button onClick={() => startInterview("all")} className="px-5 py-2.5 text-sm font-medium text-white bg-[#028FA2] rounded-xl hover:bg-[#027a8c] transition-colors">
-            All {parsed.all.length} Questions
-          </button>
-          <button onClick={() => startInterview("easy")} className="px-4 py-2.5 text-xs font-medium text-green-700 bg-green-50 border border-green-200 rounded-xl hover:bg-green-100 transition-colors">
-            Easy ({parsed.easy.length})
-          </button>
-          <button onClick={() => startInterview("medium")} className="px-4 py-2.5 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-xl hover:bg-amber-100 transition-colors">
-            Medium ({parsed.medium.length})
-          </button>
-          <button onClick={() => startInterview("hard")} className="px-4 py-2.5 text-xs font-medium text-red-700 bg-red-50 border border-red-200 rounded-xl hover:bg-red-100 transition-colors">
-            Hard ({parsed.hard.length})
-          </button>
-        </div>
-      </div>
+      ) : (
+        <>
+          {parsed.overview && <p className="text-sm text-[#888]">{parsed.overview}</p>}
 
-      {/* Tips */}
-      {parsed.tips.length > 0 && (
-        <div className="border border-white/[0.06] rounded-xl p-4">
-          <h4 className="text-xs font-semibold text-white uppercase mb-2">Interview Tips</h4>
-          <ul className="space-y-1">
-            {parsed.tips.map((tip: string, i: number) => (
-              <li key={i} className="text-xs text-[#888] flex items-start gap-2"><span className="text-[#028FA2] mt-0.5">•</span> {tip}</li>
+          {parsed.insights.length > 0 && (
+            <div className="border border-[#028FA2]/20 bg-[#028FA2]/[0.04] rounded-xl p-4">
+              <h4 className="text-xs font-semibold text-white uppercase mb-2">About your interviewer</h4>
+              <ul className="space-y-1">
+                {parsed.insights.map((tip: string, i: number) => (
+                  <li key={i} className="text-xs text-[#888] flex items-start gap-2"><span className="text-[#028FA2] mt-0.5">•</span> {tip}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          <div className="grid grid-cols-3 gap-3">
+            {(["easy", "medium", "hard"] as const).map((d) => (
+              <div key={d} className={`p-4 rounded-xl border text-center ${d === "easy" ? "border-green-200 bg-green-50" : d === "hard" ? "border-red-200 bg-red-50" : "border-amber-200 bg-amber-50"}`}>
+                <p className={`text-xl font-bold ${d === "easy" ? "text-green-600" : d === "hard" ? "text-red-600" : "text-amber-600"}`}>{questions.filter((q: any) => q.difficulty === d).length}</p>
+                <p className="text-xs font-semibold text-white capitalize">{d}</p>
+                <p className="text-[0.667rem] text-[#555] mt-0.5">{d === "easy" ? 2 : d === "hard" ? 5 : 3} min per question</p>
+              </div>
             ))}
-          </ul>
-        </div>
+          </div>
+
+          <div className="bg-[#028FA2]/[0.04] rounded-lg border border-[#028FA2]/20 p-6 text-center">
+            <h3 className="text-lg font-bold text-white">Start the {stageInfo.label.toLowerCase()} round</h3>
+            <p className="text-sm text-[#888] mt-1 mb-4">Timed. Answer each question before time runs out. No going back.</p>
+            <button onClick={startInterview} disabled={questions.length === 0} className="px-5 py-2.5 text-sm font-medium text-white bg-[#028FA2] rounded-xl hover:bg-[#027a8c] transition-colors disabled:opacity-50">
+              Start {questions.length} questions
+            </button>
+          </div>
+
+          {parsed.tips.length > 0 && (
+            <div className="border border-white/[0.06] rounded-xl p-4">
+              <h4 className="text-xs font-semibold text-white uppercase mb-2">Tips for this round</h4>
+              <ul className="space-y-1">
+                {parsed.tips.map((tip: string, i: number) => (
+                  <li key={i} className="text-xs text-[#888] flex items-start gap-2"><span className="text-[#028FA2] mt-0.5">•</span> {tip}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {stage !== "general" && (
+            <details className="border border-white/[0.06] rounded-xl p-4">
+              <summary className="text-xs font-medium text-[#028FA2] cursor-pointer">Regenerate this round{stageData?.interviewer ? " (interviewer added)" : ", optionally for a specific interviewer"}</summary>
+              <div className="mt-3 space-y-3">
+                {interviewerField}
+                <button onClick={() => onRun(stage, interviewer[stage] || "")} className="px-4 py-2 text-xs font-medium text-white bg-[#028FA2] rounded-lg hover:bg-[#027a8c]">Regenerate {stageInfo.label}</button>
+              </div>
+            </details>
+          )}
+        </>
       )}
     </div>
   );
