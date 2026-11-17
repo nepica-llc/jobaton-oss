@@ -80,6 +80,8 @@ export const api = {
     request("/ai/ats-score", { method: "POST", body: JSON.stringify({ resumeText, jobDescription }) }),
   coverLetter: (resumeText: string, jobDescription: string, tone?: string) =>
     request("/ai/cover-letter", { method: "POST", body: JSON.stringify({ resumeText, jobDescription, tone }) }),
+  companyFacts: (company: string, jobTitle: string, jobDescription: string) =>
+    request<{ facts: string[] }>("/ai/company-facts", { method: "POST", body: JSON.stringify({ company, jobTitle, jobDescription }) }),
   studyGuide: (jobTitle: string, company: string, jobDescription: string) =>
     request("/ai/study-guide", { method: "POST", body: JSON.stringify({ jobTitle, company, jobDescription }) }),
   studyContent: (mode: string, topic: string, moduleTitle: string, jobTitle: string, jobDescription: string) =>

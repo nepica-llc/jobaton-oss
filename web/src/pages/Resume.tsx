@@ -47,23 +47,21 @@ const emptyResume: ResumeData = {
   awards: [],
 };
 
-const MOTIVATIONAL_QUOTES = [
-  "The future belongs to those who believe in the beauty of their dreams. - Eleanor Roosevelt",
-  "Success is not final, failure is not fatal: it is the courage to continue that counts. - Winston Churchill",
-  "Your time is limited, don't waste it living someone else's life. - Steve Jobs",
-  "The only way to do great work is to love what you do. - Steve Jobs",
-  "Believe you can and you're halfway there. - Theodore Roosevelt",
-  "It always seems impossible until it's done. - Nelson Mandela",
-  "The best way to predict the future is to create it. - Peter Drucker",
-  "Don't watch the clock; do what it does. Keep going. - Sam Levenson",
-  "Opportunities don't happen. You create them. - Chris Grosser",
-  "The harder you work for something, the greater you'll feel when you achieve it.",
-  "Dream big. Start small. Act now. - Robin Sharma",
-  "Every expert was once a beginner. - Helen Hayes",
+const RESUME_TIPS = [
+  "Start each bullet with a strong verb and end it with a measurable result.",
+  "Mirror the exact keywords from the job description so ATS filters find you.",
+  "Keep your resume to one or two pages. Recruiters skim in seconds.",
+  "Put your most relevant experience first, not just your most recent.",
+  "Numbers stand out: team size, users served, cost saved, time cut.",
+  "Tailor your headline to the role you want next, not the one you have.",
+  "Prepare a two-minute story for every project on your resume.",
+  "Remove skills you would not want to be tested on in an interview.",
+  "Use a simple layout. Tables and columns can confuse ATS parsers.",
+  "Save one master resume, then tailor a copy for each job you apply to.",
 ];
 
-function getRandomQuote() {
-  return MOTIVATIONAL_QUOTES[Math.floor(Math.random() * MOTIVATIONAL_QUOTES.length)];
+function getRandomTip() {
+  return RESUME_TIPS[Math.floor(Math.random() * RESUME_TIPS.length)];
 }
 
 function generateResumeName(parsed: ResumeData, existingCount: number): string {
@@ -420,7 +418,7 @@ Rules:
                 />
               </div>
               <p className="text-xs text-[#555] mt-2">{uploadProgress.percent}%. Please wait, do not navigate away</p>
-              <p className="text-xs text-[#888] italic mt-4 px-4 leading-relaxed">"{getRandomQuote()}"</p>
+              <p className="text-xs text-[#888] mt-4 px-4 leading-relaxed"><span className="font-semibold text-[#028FA2]">Tip: </span>{getRandomTip()}</p>
             </div>
           </div>
         )}
@@ -495,7 +493,7 @@ Rules:
             <Loader2 className="h-10 w-10 text-[#028FA2] animate-spin mx-auto mb-4" />
             <h3 className="text-lg font-semibold text-white">AI is working...</h3>
             <p className="text-xs text-[#555] mt-2">Please wait, do not navigate away</p>
-            <p className="text-xs text-[#888] italic mt-4 px-4 leading-relaxed">"{getRandomQuote()}"</p>
+            <p className="text-xs text-[#888] mt-4 px-4 leading-relaxed"><span className="font-semibold text-[#028FA2]">Tip: </span>{getRandomTip()}</p>
           </div>
         </div>
       )}
