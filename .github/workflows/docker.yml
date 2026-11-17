@@ -77,3 +77,13 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # Docker Hub "Overview" tab = this README (needs a token with Read, Write, Delete scope)
+      - name: Update Docker Hub description
+        uses: peter-evans/dockerhub-description@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          repository: ${{ env.IMAGE_NAME }}
+          readme-filepath: ./README.md
+          short-description: "Self-hosted AI job search toolkit: job search, ATS scanner, cover letters, interview prep"
