@@ -84,14 +84,37 @@ export default function JobPrep() {
       .finally(() => setLoading(false));
   }, [id]);
 
-  // Save prep data to job whenever results change
+  // Save prep data to job whenever results change. Builds on the latest job (via ref) so
+  // saves that finish out of order (e.g. company facts vs. a cover letter) don't drop each other.
+  const jobRef = useRef<any>(null);
+  jobRef.current = job;
   const persistPrep = useCallback(async (updates: Record<string, any>) => {
-    if (!job) return;
-    const prep_data = { ...(job.prep_data || {}), ...updates, resume_id: selectedResumeId };
-    const updated = { ...job, prep_data };
+    const cur = jobRef.current;
+    if (!cur) return;
+    const prep_data = { ...(cur.prep_data || {}), ...updates, resume_id: selectedResumeId };
+    const updated = { ...cur, prep_data };
+    jobRef.current = updated;
     setJob(updated);
     try { await api.updateJob(id!, updated); } catch { /* silent */ }
-  }, [job, id, selectedResumeId]);
+  }, [id, selectedResumeId]);
+
+  // Company facts: fetched once per job in the background, shown while AI work runs.
+  const companyFacts: string[] = job?.prep_data?.company_facts?.company === job?.company ? job?.prep_data?.company_facts?.facts || [] : [];
+  useEffect(() => {
+    const cur = jobRef.current;
+    if (!cur?.company || /^unknown$/i.test(cur.company) || cur.prep_data?.company_facts?.company === cur.company) return;
+    api.companyFacts(cur.company, cur.title || "", cur.raw_description || "")
+      .then((r) => { if (r.facts?.length) persistPrep({ company_facts: { company: cur.company, facts: r.facts } }); })
+      .catch(() => { /* optional: quotes are shown instead */ });
+  }, [job?.id]);
+
+  const [factIdx, setFactIdx] = useState(0);
+  useEffect(() => {
+    if (!tabLoading || companyFacts.length === 0) return;
+    setFactIdx(Math.floor(Math.random() * companyFacts.length));
+    const t = setInterval(() => setFactIdx((i) => (i + 1) % companyFacts.length), 6000);
+    return () => clearInterval(t);
+  }, [tabLoading, companyFacts.length]);
 
   const getResumeText = () => {
     const resume = resumes.find((r) => r.id === selectedResumeId);
@@ -263,7 +286,15 @@ export default function JobPrep() {
               <div className="bg-[#028FA2] h-2 rounded-full animate-pulse" style={{ width: "60%" }} />
             </div>
             <p className="text-xs text-[#555] mt-2">Please wait, do not navigate away</p>
-            <p className="text-xs text-[#888] italic mt-4 px-4 leading-relaxed">"{loadingQuote}"</p>
+            {companyFacts.length > 0 ? (
+              <div className="mt-5 text-left border border-[#028FA2]/20 bg-[#028FA2]/[0.06] rounded-lg p-4" aria-live="polite">
+                <p className="text-[0.667rem] uppercase tracking-wider font-bold text-[#028FA2] mb-1">Know before you interview: {job.company}</p>
+                <p key={factIdx} className="text-sm text-white leading-relaxed animate-fade-in">{companyFacts[factIdx % companyFacts.length]}</p>
+                <p className="text-[0.6rem] text-[#555] mt-2">AI-generated. Verify key details on the company's website.</p>
+              </div>
+            ) : (
+              <p className="text-xs text-[#888] italic mt-4 px-4 leading-relaxed">"{loadingQuote}"</p>
+            )}
           </div>
         </div>
       )}

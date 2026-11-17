@@ -508,6 +508,42 @@ RULES:
 });
 
 // ---------------------------------------------------------------------------
+// AI: Company facts (shown while other AI work runs, so the wait is useful)
+// ---------------------------------------------------------------------------
+app.post("/api/ai/company-facts", async (req, res) => {
+  try {
+    const { company, jobTitle, jobDescription, apiKey } = req.body;
+    if (!company || typeof company !== "string") return res.status(400).json({ ok: false, error: "Company is required" });
+    const ai = getAIClient(apiKey);
+    if (!ai) return res.status(400).json({ ok: false, error: "No API key configured." });
+    const completion = await ai.client.chat.completions.create({
+      model: ai.model,
+      messages: [
+        {
+          role: "system",
+          content: `You help a candidate prepare for an interview. Give 8 short facts about the company that are useful to know before interviewing: what it does, main products or services, customers, size or headquarters, recent direction, culture or values, and how this role fits in.
+Rules:
+- One sentence each, at most 25 words, plain and specific.
+- Only state facts you are confident are accurate. Never guess numbers or dates.
+- If you do not know the company well, use the job description instead and start those facts with "From the job post:".
+Return JSON: {"facts": ["...", "..."]}`,
+        },
+        { role: "user", content: `COMPANY: ${company}\nROLE: ${jobTitle || ""}\n\nJOB DESCRIPTION:\n${String(jobDescription || "").slice(0, 4000)}` },
+      ],
+      temperature: 0.3,
+      max_tokens: 800,
+      response_format: { type: "json_object" },
+    });
+    const parsed = JSON.parse(noDash(completion.choices[0]?.message?.content || "{}"));
+    const facts = (Array.isArray(parsed.facts) ? parsed.facts : []).filter((f: unknown) => typeof f === "string" && f.trim()).slice(0, 10);
+    res.json({ ok: true, data: { facts }, usage: completion.usage });
+  } catch (err: any) {
+    console.error("[ai/company-facts]", err.message);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
 // AI: Study Guide (10 modules based on job requirements)
 // ---------------------------------------------------------------------------
 app.post("/api/ai/study-guide", async (req, res) => {
