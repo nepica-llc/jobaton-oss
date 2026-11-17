@@ -637,38 +637,33 @@ app.post("/api/ai/generate-lesson", async (req, res) => {
     const ai = getAIClient(apiKey);
     if (!ai) return res.status(400).json({ ok: false, error: "No API key configured." });
 
-    const systemPrompt = `You are an expert technical trainer creating comprehensive, in-depth learning content for job interview preparation.
+    const systemPrompt = `You are an expert trainer creating bite-sized lesson content for job interview preparation.
+Given a skill name, job title, company and a lesson title, generate the lesson as a sequence of short cards the learner reads (or listens to) one at a time.
 
-Given a skill name, job title, company, and a lesson title, generate thorough, high-quality lesson content.
+CARDS:
+- 8 to 12 cards in "sections". Each card "body" is ONE or TWO short sentences (at most 40 words). Never a paragraph.
+- Each card teaches one idea. Use concrete, practical wording that sounds natural when read aloud.
+- Group consecutive cards with the same "heading" when they cover the same concept.
+- Add a short "codeSnippet" (at most 12 lines) to at most 2 cards, only where code genuinely helps.
 
-CRITICAL REQUIREMENTS:
-- The lesson MUST have 5-7 sections minimum. Each section body MUST be at least 4-6 sentences with real substance.
-- Include code snippets in at least 2 sections where relevant (practical code examples the learner can study).
-- Include 5-7 keyPoints that summarize key takeaways.
-- Include a detailed practicePrompt with clear step-by-step instructions (at least 3-4 sentences).
-- If the lesson type is "quiz", include 8-10 MCQ questions covering different difficulty levels (easy, medium, hard).
-- Make content practical and directly relevant to interview scenarios.
-- Each section body should teach a concept thoroughly - imagine you're writing a textbook section, not a bullet point.
-- Include real-world analogies, best practices, common pitfalls, and interview tips in the body text.
+QUESTIONS (every question must be gradeable):
+- "quiz" contains ONLY multiple-choice questions with exactly 4 options and exactly one correct answer ("correctIndex", 0 to 3).
+- Never ask open-ended, free-text or "explain in your own words" questions.
+- Lesson type "read": 3 questions checking the cards.
+- Lesson type "practice": 5 scenario questions. Each describes a realistic work or interview situation and asks which action, answer or fix is best.
+- Lesson type "quiz": 8 questions mixing easy, medium and hard.
+- Each question has a one-sentence "explanation" of why the correct option is right.
+
+Also include 3 to 5 short "keyPoints".
 
 Return ONLY valid JSON:
 {
   "title": "exact lesson title",
-  "sections": [
-    {"heading": "Section heading", "body": "Thorough multi-paragraph explanation. Minimum 4-6 sentences with real depth. Include examples, best practices, and common pitfalls.", "codeSnippet": "optional but encouraged - include practical code examples"}
-  ],
-  "keyPoints": ["Key takeaway 1", "Key takeaway 2", "...at least 5"],
-  "practicePrompt": "A detailed hands-on exercise with clear steps (empty string if quiz lesson)",
-  "quiz": [{"question": "...", "options": ["A", "B", "C", "D"], "correctIndex": 0}]
-}
-
-Rules:
-- If lesson type is "quiz", fill the quiz array with 8-10 questions and leave practicePrompt empty
-- Otherwise fill practicePrompt and leave quiz as empty array
-- NEVER produce fewer than 5 sections
-- NEVER produce shallow one-sentence section bodies - each must be substantive
-- Return ONLY valid JSON, no markdown, no commentary`;
-
+  "sections": [{"heading": "Concept name", "body": "One or two short sentences.", "codeSnippet": ""}],
+  "keyPoints": ["Short takeaway"],
+  "practicePrompt": "",
+  "quiz": [{"question": "...", "options": ["A", "B", "C", "D"], "correctIndex": 0, "explanation": "Why this is right."}]
+}`;
     const userPrompt = `SKILL: ${skill}\nJOB TITLE: ${jobTitle}\nCOMPANY: ${company || "Company"}\nLESSON TYPE: ${lessonType}\n\nGENERATE THIS LESSON:\n${lessonTitle}\n\nALL LESSONS IN MODULE:\n${(allLessonTitles || []).map((t: string, i: number) => `${i + 1}. ${t}`).join("\n")}`;
 
     const completion = await ai.client.chat.completions.create({
