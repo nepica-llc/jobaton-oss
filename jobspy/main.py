@@ -56,7 +56,7 @@ def search_jobs(
     search_term: str = Query(..., description="Job title or keywords"),
     location: str = Query("", description="Location filter"),
     results_wanted: int = Query(15, ge=1, le=50),
-    site_name: str = Query("indeed,linkedin_com,glassdoor", description="Comma-separated site names"),
+    site_name: str = Query("indeed,linkedin,glassdoor", description="Comma-separated site names"),
     force_refresh: bool = Query(False, description="Bypass cache"),
 ):
     """Search for jobs using python-jobspy. Results are cached."""
