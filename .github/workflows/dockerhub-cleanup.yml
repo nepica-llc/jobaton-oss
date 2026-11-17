@@ -1,0 +1,55 @@
+name: Docker Hub cleanup
+
+# Manual only (Actions tab > Docker Hub cleanup > Run workflow).
+# Deletes every nepica/jobaton tag except "latest" and the newest version (or the one you name).
+# Runs as a dry run by default: it only lists what it would delete.
+# Needs DOCKERHUB_TOKEN with Read, Write, Delete scope.
+
+on:
+  workflow_dispatch:
+    inputs:
+      keep:
+        description: "Version tag to keep besides latest (blank = newest version)"
+        required: false
+        default: ""
+      dry_run:
+        description: "Only list what would be deleted"
+        type: boolean
+        default: true
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    env:
+      REPO: nepica/jobaton
+      USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+      KEEP: ${{ inputs.keep }}
+      DRY_RUN: ${{ inputs.dry_run }}
+    steps:
+      - name: Delete old tags
+        run: |
+          set -euo pipefail
+          jwt=$(curl -fsS -X POST https://hub.docker.com/v2/users/login \
+            -H 'Content-Type: application/json' \
+            -d "$(jq -n --arg u "$USERNAME" --arg p "$TOKEN" '{username:$u,password:$p}')" | jq -r .token)
+          [ -n "$jwt" ] && [ "$jwt" != null ] || { echo "Docker Hub login failed"; exit 1; }
+
+          tags=$(curl -fsS -H "Authorization: Bearer $jwt" \
+            "https://hub.docker.com/v2/repositories/$REPO/tags?page_size=100" | jq -r '.results[].name')
+          echo "Current tags:"; echo "$tags"
+
+          keep="${KEEP:-$(echo "$tags" | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1)}"
+          [ -n "$keep" ] || { echo "No version tag found to keep; stopping"; exit 1; }
+          echo "$tags" | grep -qx "$keep" || { echo "Tag $keep does not exist; stopping"; exit 1; }
+          echo "Keeping: latest, $keep"
+
+          for t in $tags; do
+            { [ "$t" = latest ] || [ "$t" = "$keep" ]; } && continue
+            if [ "$DRY_RUN" = true ]; then
+              echo "Would delete: $t"
+            else
+              curl -fsS -X DELETE -H "Authorization: Bearer $jwt" "https://hub.docker.com/v2/repositories/$REPO/tags/$t/"
+              echo "Deleted: $t"
+            fi
+          done
