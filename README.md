@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="logo/logo.png" alt="Jobaton logo" width="120" />
+<img src="https://raw.githubusercontent.com/nepica-llc/jobaton-oss/main/logo/logo.png" alt="Jobaton logo" width="120" />
 
 # Jobaton OSS
 
@@ -9,12 +9,12 @@
 Find jobs, beat the ATS, write cover letters and prep for interviews.<br/>
 Self-hosted, open source, and private by default.
 
-[![License: MIT](https://img.shields.io/github/license/nepica-llc/jobaton-oss?color=0E8FA0)](LICENSE)
+[![License: MIT](https://img.shields.io/github/license/nepica-llc/jobaton-oss?color=0E8FA0)](https://github.com/nepica-llc/jobaton-oss/blob/main/LICENSE)
 [![Docker Pulls](https://img.shields.io/docker/pulls/nepica/jobaton?color=0E8FA0&logo=docker&logoColor=white)](https://hub.docker.com/r/nepica/jobaton)
 [![Latest release](https://img.shields.io/github/v/tag/nepica-llc/jobaton-oss?label=release&color=0E8FA0)](https://github.com/nepica-llc/jobaton-oss/tags)
-[![Bring your own key](https://img.shields.io/badge/AI-bring%20your%20own%20key-0E8FA0)](#-pick-your-ai)
+[![Bring your own key](https://img.shields.io/badge/AI-bring%20your%20own%20key-0E8FA0)](https://github.com/nepica-llc/jobaton-oss#-pick-your-ai)
 
-[Quick start](#-quick-start) · [Features](#-what-you-can-do) · [AI providers](#-pick-your-ai) · [Privacy](#-privacy-and-security) · [Contributing](#-contributing)
+[Quick start](https://github.com/nepica-llc/jobaton-oss#-quick-start) · [Features](https://github.com/nepica-llc/jobaton-oss#-what-you-can-do) · [AI providers](https://github.com/nepica-llc/jobaton-oss#-pick-your-ai) · [Privacy](https://github.com/nepica-llc/jobaton-oss#-privacy-and-security) · [Contributing](https://github.com/nepica-llc/jobaton-oss#-contributing)
 
 </div>
 
@@ -42,14 +42,7 @@ Job hunting means juggling a dozen tabs, a pile of resume versions and a spreads
 
 ### How it fits together
 
-```mermaid
-flowchart LR
-    A[🔎 Find a job] --> B[🎯 Scan your resume]
-    B --> C[📄 Tailor it]
-    C --> D[✉️ Cover letter]
-    D --> E[🧭 Prep and practice]
-    E --> F[🎉 Interview ready]
-```
+🔎 **Find a job** → 🎯 **Scan your resume** → 📄 **Tailor it** → ✉️ **Cover letter** → 🧭 **Prep and practice** → 🎉 **Interview ready**
 
 ## 🚀 Quick start
 
@@ -139,10 +132,10 @@ Love the OSS version but want more? [**Jobaton Pro**](https://jobaton.com) adds 
 
 ## 📜 License
 
-[MIT](LICENSE). Free to use, modify and share.
+[MIT](https://github.com/nepica-llc/jobaton-oss/blob/main/LICENSE). Free to use, modify and share.
 
 <div align="center">
 <br/>
-<img src="logo/logo.png" alt="" width="32" /><br/>
+<img src="https://raw.githubusercontent.com/nepica-llc/jobaton-oss/main/logo/logo.png" alt="" width="32" /><br/>
 <sub>Made for job seekers who'd rather be preparing than tab-juggling.</sub>
 </div>
