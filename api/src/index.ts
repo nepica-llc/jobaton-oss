@@ -1,7 +1,7 @@
 import express from "express";
 import cors from "cors";
 import path from "node:path";
-import { readCollection, upsert, remove, getSettings, saveSettings, getById, getProfile, saveProfile, getJobsByStatus, listProfiles, profileExists, createProfile, renameProfile, deleteProfile } from "./storage.js";
+import { readCollection, upsert, remove, getSettings, saveSettings, getById, getProfile, saveProfile, getJobsByStatus, listProfiles, profileExists, createProfile, renameProfile, resetProfile, deleteProfile } from "./storage.js";
 import OpenAI from "openai";
 import { v4 as uuid } from "uuid";
 
@@ -44,6 +44,12 @@ app.put("/api/profiles/:id", (req, res) => {
   if (!name) return res.status(400).json({ ok: false, error: "Profile name is required" });
   if (!renameProfile(req.params.id, name)) return res.status(404).json({ ok: false, error: "Profile not found" });
   res.json({ ok: true, data: { id: req.params.id, name } });
+});
+
+app.post("/api/profiles/:id/reset", (req, res) => {
+  if (!profileExists(req.params.id)) return res.status(404).json({ ok: false, error: "Profile not found" });
+  resetProfile(req.params.id);
+  res.json({ ok: true });
 });
 
 app.delete("/api/profiles/:id", (req, res) => {

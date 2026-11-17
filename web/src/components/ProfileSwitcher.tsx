@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Users } from "lucide-react";
 import { api, getActiveProfile, switchProfile } from "@/lib/api";
 
-const NEW = "__new", RENAME = "__rename", DELETE = "__delete";
+const NEW = "__new", RENAME = "__rename", RESET = "__reset", DELETE = "__delete";
 
 export default function ProfileSwitcher({ isDark }: { isDark: boolean }) {
   const [profiles, setProfiles] = useState<{ id: string; name: string }[]>([]);
@@ -28,6 +28,11 @@ export default function ProfileSwitcher({ isDark }: { isDark: boolean }) {
         if (name && name !== current.name) {
           await api.renameProfile(current.id, name);
           setProfiles(profiles.map((p) => (p.id === current.id ? { ...p, name } : p)));
+        }
+      } else if (value === RESET && current) {
+        if (window.confirm(`Reset "${current.name}"? This deletes its profile details, resumes, cover letters and jobs, and keeps the empty profile. This cannot be undone.`)) {
+          await api.resetProfile(current.id);
+          switchProfile(current.id);
         }
       } else if (value === DELETE && current && current.id !== "default") {
         if (window.confirm(`Delete the profile "${current.name}" and all its resumes, cover letters and jobs? This cannot be undone.`)) {
@@ -57,6 +62,7 @@ export default function ProfileSwitcher({ isDark }: { isDark: boolean }) {
         <option disabled>──────────</option>
         <option value={NEW}>New profile…</option>
         <option value={RENAME}>Rename this profile…</option>
+        <option value={RESET}>Reset this profile's data…</option>
         {active !== "default" && <option value={DELETE}>Delete this profile…</option>}
       </select>
     </label>
