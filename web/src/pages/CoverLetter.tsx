@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Mail, Sparkles, Copy, Download, Loader2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import LetterPaper from "@/components/LetterPaper";
 import { api } from "@/lib/api";
 
 export default function CoverLetter() {
@@ -136,9 +137,7 @@ export default function CoverLetter() {
                   <Download className="h-3 w-3" /> Save
                 </button>
               </div>
-              <div className="prose prose-sm max-w-none text-gray-700 whitespace-pre-wrap text-sm leading-relaxed">
-                {coverLetter}
-              </div>
+              <LetterPaper text={coverLetter} />
             </div>
           )}
 
