@@ -12,7 +12,14 @@ interface DashStats {
   recent: { id: string; title?: string; company?: string; status: string }[];
 }
 
+// Uses the browser's local time, so it matches wherever the user is.
+function greeting(d = new Date()) {
+  const h = d.getHours();
+  return h >= 5 && h < 12 ? "Good morning" : h >= 12 && h < 17 ? "Good afternoon" : "Good evening";
+}
+
 export default function Dashboard() {
+  const [firstName, setFirstName] = useState("");
   const [stats, setStats] = useState<DashStats>({ resumes: 0, jobs: 0, profileComplete: false, statusBreakdown: {}, prepProgress: { ats: 0, tailor: 0, cover: 0, study: 0, interview: 0 }, recent: [] });
   const [loading, setLoading] = useState(true);
   const [gettingStartedDismissed, setGettingStartedDismissed] = useState(() => localStorage.getItem("jobaton_gs_dismissed") === "true");
@@ -23,6 +30,7 @@ export default function Dashboard() {
       api.getJobs().catch(() => []),
       api.getProfile().catch(() => null),
     ]).then(([resumes, jobs, profile]) => {
+      setFirstName(String(profile?.fullName || resumes?.[0]?.fullName || "").trim().split(/\s+/)[0] || "");
       const hasProfile = !!(profile?.headline?.trim() && profile?.skills?.trim() && profile?.location?.trim());
       const jobList = jobs || [];
       const statusBreakdown: Record<string, number> = {};
@@ -81,8 +89,8 @@ export default function Dashboard() {
     <div className="animate-fade-in">
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-lg font-semibold text-white">Dashboard</h1>
-        <p className="text-sm text-[#666] mt-0.5">Your self-hosted AI career toolkit overview.</p>
+        <h1 className="text-lg font-semibold text-white">{greeting()}{firstName ? `, ${firstName}` : ""}</h1>
+        <p className="text-sm text-[#666] mt-0.5">Welcome back. Here is where your job search stands.</p>
       </div>
 
       {/* Getting Started - dismissible */}

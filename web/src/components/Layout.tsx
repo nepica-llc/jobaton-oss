@@ -54,7 +54,7 @@ export default function Layout() {
             <button
               onClick={toggle}
               className={`p-1.5 rounded-md transition-all ${isDark ? "text-[#888] hover:text-amber-300 hover:bg-white/[0.04]" : "text-[#8898aa] hover:text-[#0a2540] hover:bg-black/[0.04]"}`}
-              title={isDark ? "Switch to light mode" : "Switch to dark mode"}
+              title={`${isDark ? "Switch to light mode" : "Switch to dark mode"}. The theme follows the time of day (light 7 AM to 7 PM); your choice lasts until the next switch.`}
             >
               {isDark ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
             </button>

@@ -7,7 +7,7 @@
     <link rel="icon" type="image/png" href="/logo.png" />
     <link rel="apple-touch-icon" href="/logo.png" />
     <script>
-      (function(){var t=localStorage.getItem('jobaton_theme');if(!t)t=window.matchMedia('(prefers-color-scheme:light)').matches?'light':'dark';document.documentElement.className=t;})();
+      (function(){var t;try{var o=JSON.parse(localStorage.getItem('jobaton_theme_override')||'null');if(o&&Date.now()<o.until)t=o.theme}catch(e){}if(t!=='light'&&t!=='dark'){var h=new Date().getHours();t=h>=7&&h<19?'light':'dark'}document.documentElement.className=t;})();
     </script>
   </head>
   <body class="antialiased">
