@@ -133,11 +133,36 @@ export default function JobPrep() {
     return parts.join("\n");
   };
 
+  // Every AI tool reads the job description; some search results arrive without one.
+  const hasDescription = () => {
+    if (jobRef.current?.raw_description?.trim()) return true;
+    toast.error("Add the job description on the Overview tab first");
+    setActiveTab("overview");
+    return false;
+  };
+
+  const saveDescription = async (text: string) => {
+    const parsed: any = await api.parseJob(text).catch((e) => { toast.error(`Saved, but could not analyze: ${e.message}`); return {}; });
+    const cur = jobRef.current;
+    const updated = {
+      ...cur,
+      raw_description: text,
+      requirements: parsed.requirements?.length ? parsed.requirements : cur.requirements || [],
+      nice_to_have: parsed.nice_to_have?.length ? parsed.nice_to_have : cur.nice_to_have || [],
+      description_summary: parsed.description_summary || cur.description_summary || "",
+      salary: cur.salary || parsed.salary || "",
+    };
+    jobRef.current = updated;
+    setJob(updated);
+    await api.updateJob(id!, updated);
+  };
+
   const startLoading = (tab: string) => { setTabLoading(true); setLoadingTab(tab); setLoadingQuote(getRandomQuote()); };
   const stopLoading = () => { setTabLoading(false); setLoadingTab(null); };
 
   const runATS = async () => {
     if (!selectedResumeId) { toast.error("Select a resume first"); return; }
+    if (!hasDescription()) return;
     startLoading("ats");
     try {
       const result = await api.atsScore(getResumeText(), job.raw_description || "");
@@ -149,6 +174,7 @@ export default function JobPrep() {
 
   const runTailor = async () => {
     if (!selectedResumeId) { toast.error("Select a resume first"); return; }
+    if (!hasDescription()) return;
     startLoading("tailor");
     try {
       const result = await api.tailorResume(getResumeText(), job.raw_description || "");
@@ -173,6 +199,7 @@ export default function JobPrep() {
 
   const runCoverLetter = async () => {
     if (!selectedResumeId) { toast.error("Select a resume first"); return; }
+    if (!hasDescription()) return;
     startLoading("cover-letter");
     try {
       const result = await api.coverLetter(getResumeText(), job.raw_description || "", "professional");
@@ -184,6 +211,7 @@ export default function JobPrep() {
   };
 
   const runStudyGuide = async () => {
+    if (!hasDescription()) return;
     startLoading("study-guide");
     try {
       const result = await api.studyGuide(job.title || "", job.company || "", job.raw_description || "");
@@ -194,6 +222,7 @@ export default function JobPrep() {
   };
 
   const runInterviewPrep = async (stage: string, interviewer: string) => {
+    if (!hasDescription()) return;
     startLoading("interview");
     try {
       const result = await api.interviewPrep(job.title || "", job.company || "", job.raw_description || "", stage, interviewer || undefined);
@@ -251,7 +280,7 @@ export default function JobPrep() {
 
       {/* Tab content */}
       <div className="bg-[#1a1a1a] rounded-xl border border-white/10 p-5 min-h-[300px]">
-        {activeTab === "overview" && <OverviewTab job={job} />}
+        {activeTab === "overview" && <OverviewTab job={job} onSaveDescription={saveDescription} />}
         {activeTab === "ats" && <ATSTab result={atsResult} loading={tabLoading} onRun={runATS} />}
         {activeTab === "tailor" && (
           <TailorTab
@@ -303,9 +332,45 @@ export default function JobPrep() {
 }
 
 // ─── Overview Tab ────────────────────────────────────────────────────────────
-function OverviewTab({ job }: { job: any }) {
+function OverviewTab({ job, onSaveDescription }: { job: any; onSaveDescription: (text: string) => Promise<void> }) {
+  const [text, setText] = useState("");
+  const [saving, setSaving] = useState(false);
+  const analyzed = job.description_summary || job.requirements?.length > 0;
+  const save = async (value: string) => {
+    if (!value.trim()) return;
+    setSaving(true);
+    try { await onSaveDescription(value.trim()); setText(""); } catch (e: any) { toast.error(e.message); }
+    finally { setSaving(false); }
+  };
+  if (!job.raw_description?.trim()) {
+    return (
+      <div className="space-y-3">
+        <div>
+          <h3 className="text-sm font-semibold text-white">This job has no description yet</h3>
+          <p className="text-xs text-[#888] mt-1">
+            The job board did not include it. Open the{" "}
+            {job.url ? <a href={job.url} target="_blank" rel="noreferrer" className="text-[#028FA2] underline">original posting</a> : "original posting"}
+            , copy the full description and paste it below. ATS score, tailoring, cover letter, study guide and interview prep all use it.
+          </p>
+        </div>
+        <textarea value={text} onChange={(e) => setText(e.target.value)} rows={10} placeholder="Paste the full job description here" aria-label="Job description"
+          className="w-full text-sm bg-white/[0.04] border border-white/10 rounded-lg p-3 text-white placeholder:text-[#555] focus:outline-none focus:border-[#028FA2]" />
+        <button onClick={() => save(text)} disabled={saving || !text.trim()} className="glass-btn-primary flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-md disabled:opacity-50">
+          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />} Save and analyze
+        </button>
+      </div>
+    );
+  }
   return (
     <div className="space-y-4">
+      {!analyzed && (
+        <div className="flex items-center justify-between gap-3 border border-[#028FA2]/20 bg-[#028FA2]/[0.06] rounded-lg p-3">
+          <p className="text-xs text-[#888]">The summary and requirements have not been extracted yet.</p>
+          <button onClick={() => save(job.raw_description)} disabled={saving} className="glass-btn-primary flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-md disabled:opacity-50 shrink-0">
+            {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />} Analyze description
+          </button>
+        </div>
+      )}
       {job.description_summary && (
         <div>
           <h3 className="text-xs font-semibold text-gray-500 uppercase mb-1">Summary</h3>
