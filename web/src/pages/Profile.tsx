@@ -3,6 +3,7 @@ import { User, Save, Loader2, FileText, Sparkles, Check, X, Pencil, Search } fro
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
+import { profileFromResume } from "@/lib/resumeImport";
 
 export default function Profile() {
   const [loading, setLoading] = useState(true);
@@ -50,38 +51,10 @@ export default function Profile() {
     }
   };
 
-  const inferExperienceLevel = (experience: any[]): string => {
-    if (!experience?.length) return "";
-    const now = new Date().getFullYear();
-    let totalYears = 0;
-    for (const exp of experience) {
-      const start = parseInt(exp.startDate) || now;
-      const end = exp.endDate?.toLowerCase() === "present" ? now : (parseInt(exp.endDate) || now);
-      totalYears += Math.max(0, end - start);
-    }
-    if (totalYears <= 2) return "Entry-level (0-2 years)";
-    if (totalYears <= 5) return "Mid-level (3-5 years)";
-    if (totalYears <= 10) return "Senior (6-10 years)";
-    return "Staff/Principal (10+ years)";
-  };
-
   const handleImportFromResume = () => {
     const resume = resumes.find((r) => r.id === selectedResumeId);
     if (!resume) return;
-    const expLevel = inferExperienceLevel(resume.experience);
-    setForm((prev) => ({
-      ...prev,
-      fullName: resume.fullName || prev.fullName,
-      email: resume.email || prev.email,
-      phone: resume.phone || prev.phone,
-      location: resume.location || prev.location,
-      linkedin: resume.linkedin || prev.linkedin,
-      github: resume.github || prev.github,
-      portfolio: resume.portfolio || prev.portfolio,
-      headline: resume.experience?.[0]?.title || prev.headline,
-      skills: (resume.skills || []).join(", ") || prev.skills,
-      experience: expLevel || prev.experience,
-    }));
+    setForm((prev) => profileFromResume(prev, resume));
     setShowImportModal(false);
     toast.success("Profile populated from resume! Review and save.");
   };

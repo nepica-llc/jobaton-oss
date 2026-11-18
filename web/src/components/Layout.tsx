@@ -1,6 +1,7 @@
 import { NavLink, Outlet, Link } from "react-router-dom";
 import { FileText, Settings, Briefcase, User, ClipboardList, LayoutDashboard, Crown } from "lucide-react";
 import ProfileSwitcher from "./ProfileSwitcher";
+import Onboarding, { startTour } from "./Onboarding";
 
 const nav = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard" },
@@ -30,6 +31,7 @@ export default function Layout() {
                   key={to}
                   to={to}
                   end={to === "/"}
+                  data-tour={`nav-${to}`}
                   className={({ isActive }) =>
                     `flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[0.867rem] font-medium transition-all whitespace-nowrap ${
                       isActive
@@ -64,11 +66,15 @@ export default function Layout() {
           <Outlet />
         </div>
       </main>
+      <Onboarding />
 
       {/* Footer */}
       <footer className="glass-footer py-3">
         <div className={`max-w-[1440px] mx-auto px-8 flex items-center justify-between text-[0.733rem] text-[#555]`}>
-          <span>Jobaton OSS: self-hosted AI career toolkit</span>
+          <span>
+            Jobaton OSS: self-hosted AI career toolkit
+            <button onClick={startTour} className="ml-3 hover:text-[#028FA2] transition-colors">Take the tour</button>
+          </span>
           <a href="https://jobaton.com" target="_blank" rel="noopener noreferrer" className="hover:text-[#028FA2] transition-colors">
             jobaton.com
           </a>
