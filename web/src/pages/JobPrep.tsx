@@ -172,15 +172,18 @@ export default function JobPrep() {
     finally { stopLoading(); }
   };
 
-  const runTailor = async () => {
+  // confirmed: credentials the candidate says they have (answers to credential_questions); kept for later runs.
+  const runTailor = async (confirmed?: string) => {
     if (!selectedResumeId) { toast.error("Select a resume first"); return; }
     if (!hasDescription()) return;
+    const credentials = (confirmed ?? jobRef.current?.prep_data?.confirmed_credentials ?? "").trim();
     startLoading("tailor");
     try {
-      const result = await api.tailorResume(getResumeText(), job.raw_description || "");
+      const resumeText = credentials ? `${getResumeText()}\n\nCANDIDATE-CONFIRMED CREDENTIALS:\n${credentials}` : getResumeText();
+      const result = await api.tailorResume(resumeText, job.raw_description || "");
       setTailorResult(result);
       setAcceptedSuggestions([]);
-      await persistPrep({ tailor: result, accepted_suggestions: [] });
+      await persistPrep({ tailor: result, accepted_suggestions: [], confirmed_credentials: credentials });
     } catch (err: any) { toast.error(err.message); }
     finally { stopLoading(); }
   };
@@ -287,7 +290,8 @@ export default function JobPrep() {
             fileBase={safeFileName(job.company, job.title)}
             result={tailorResult}
             loading={tabLoading}
-            onRun={runTailor}
+            onRun={() => runTailor()}
+            onConfirmCredentials={(text) => runTailor(text)}
             acceptedSuggestions={[]}
             onAccept={() => {}}
             onReject={() => {}}
@@ -572,8 +576,8 @@ function ATSTab({ result, loading, onRun }: { result: any; loading: boolean; onR
 }
 
 // ─── Tailor Resume Tab ───────────────────────────────────────────────────────
-function TailorTab({ result, loading, onRun, fileBase }: {
-  result: any; loading: boolean; onRun: () => void; fileBase: string;
+function TailorTab({ result, loading, onRun, onConfirmCredentials, fileBase }: {
+  result: any; loading: boolean; onRun: () => void; onConfirmCredentials: (text: string) => void; fileBase: string;
   acceptedSuggestions: number[]; onAccept: (i: number) => void; onReject: (i: number) => void;
   atsScore: number | undefined; getResumeText: () => string; jobDescription: string;
 }) {
@@ -609,8 +613,10 @@ function TailorTab({ result, loading, onRun, fileBase }: {
   const onWord = () => { if (hasResume) downloadWord(resumeName(), buildBlocks()).catch((e) => toast.error(e.message)); };
 
   const copyToClipboard = () => {
-    if (!result?.tailored_resume) return;
-    navigator.clipboard.writeText(result.tailored_resume);
+    if (!hasResume) return;
+    // From the checked sections, not the AI's plain-text copy, so removed credentials stay out.
+    const text = buildBlocks().map((b) => b.kind === "entry" ? [b.title, b.org, b.right].filter(Boolean).join(" | ") : b.kind === "bullet" ? `- ${b.text}` : b.kind === "heading" ? `\n${b.text.toUpperCase()}` : "text" in b ? b.text : "").join("\n");
+    navigator.clipboard.writeText(text.trim());
     toast.success("Resume copied to clipboard!");
   };
 
@@ -651,6 +657,8 @@ function TailorTab({ result, loading, onRun, fileBase }: {
         </div>
       )}
 
+      {result?.credential_questions?.length > 0 && <CredentialQuestions questions={result.credential_questions} onSubmit={onConfirmCredentials} />}
+
       {/* Changes + Keywords row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {result?.changes_summary?.length > 0 && (
@@ -679,63 +687,59 @@ function TailorTab({ result, loading, onRun, fileBase }: {
           <span className="text-xs font-semibold text-[#888] uppercase">Resume Preview</span>
           <span className="text-[0.667rem] text-[#555]">Download as PDF, or as Word to keep editing</span>
         </div>
-        <div className="bg-[#1a1a1a] px-10 py-8 max-h-[650px] overflow-y-auto">
-          {sections.length > 0 ? (
-            <div className="space-y-0">
-              {sections.map((sec: any, si: number) => {
-                if (sec.type === "header") {
-                  return (
-                    <div key={si} className="text-center pb-3 mb-3 border-b-2 border-[#028FA2]">
-                      <h1 className="text-xl font-bold text-white">{sec.lines?.[0]}</h1>
-                      {sec.lines?.slice(1).map((l: string, li: number) => (
-                        <p key={li} className="text-[0.667rem] text-[#888] mt-0.5">{l}</p>
-                      ))}
-                    </div>
-                  );
-                }
-                if (sec.entries?.length > 0) {
-                  return (
-                    <div key={si} className="mt-3">
-                      <h2 className="text-[0.667rem] font-bold uppercase tracking-[1.2px] text-[#028FA2] border-b border-white/10 pb-1 mb-2">{sec.name}</h2>
-                      {sec.entries.map((entry: any, ei: number) => (
-                        <div key={ei} className="mb-2.5">
-                          <div className="flex items-baseline justify-between gap-2">
-                            <div>
-                              <span className="text-sm font-bold text-white">{entry.title}</span>
-                              {entry.org && <span className="text-sm text-[#888]"> | {entry.org}</span>}
-                            </div>
-                            <span className="text-[0.667rem] text-[#555] whitespace-nowrap">{[entry.date, entry.location].filter(Boolean).join(" | ")}</span>
-                          </div>
-                          {entry.bullets?.length > 0 && (
-                            <ul className="mt-0.5 ml-4 space-y-0">
-                              {entry.bullets.map((b: string, bi: number) => (
-                                <li key={bi} className="text-[0.733rem] text-[#1a1a1a] list-disc leading-relaxed">{b}</li>
-                              ))}
-                            </ul>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  );
-                }
-                if (sec.lines?.length > 0) {
-                  return (
-                    <div key={si} className="mt-3">
-                      <h2 className="text-[0.667rem] font-bold uppercase tracking-[1.2px] text-[#028FA2] border-b border-white/10 pb-1 mb-2">{sec.name}</h2>
-                      {sec.lines.map((l: string, li: number) => (
-                        <p key={li} className="text-[0.733rem] text-[#1a1a1a] leading-relaxed">{l}</p>
-                      ))}
-                    </div>
-                  );
-                }
-                return null;
-              })}
-            </div>
-          ) : result?.tailored_resume ? (
-            <pre className="text-sm text-gray-700 whitespace-pre-wrap font-sans leading-relaxed">{result.tailored_resume}</pre>
-          ) : null}
-        </div>
+        <ResumePaper blocks={buildBlocks()} />
       </div>
+    </div>
+  );
+}
+
+// Requirements the resume does not show. The AI may not invent them (#30), so the candidate is asked instead.
+function CredentialQuestions({ questions, onSubmit }: { questions: { requirement: string; question: string }[]; onSubmit: (text: string) => void }) {
+  const [answers, setAnswers] = useState<string[]>(() => questions.map(() => ""));
+  const filled = answers.map((a) => a.trim()).filter(Boolean);
+  return (
+    <div className="p-4 rounded-lg border border-amber-500/30 bg-amber-500/[0.06] space-y-3">
+      <div>
+        <h4 className="text-sm font-semibold text-white">Do you have these?</h4>
+        <p className="text-xs text-[#888] mt-0.5">The job asks for credentials that are not on your resume. We never add degrees or certifications you have not confirmed. If you have one, or something related, type it exactly as it should appear.</p>
+      </div>
+      {questions.map((q, i) => (
+        <label key={i} className="block">
+          <span className="text-xs text-white">{q.question}</span>
+          <input value={answers[i]} onChange={(e) => setAnswers((a) => a.map((v, j) => (j === i ? e.target.value : v)))}
+            placeholder="e.g. B.S. Information Systems, Texas A&M University, 2016 (leave blank if not)"
+            className="mt-1 w-full text-sm bg-white/[0.04] border border-white/10 rounded-md px-3 py-1.5 text-white placeholder:text-[#555] focus:outline-none focus:border-[#028FA2]" />
+        </label>
+      ))}
+      <button onClick={() => onSubmit(filled.join("\n"))} disabled={filled.length === 0} className="glass-btn-primary flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md disabled:opacity-50">
+        <Sparkles className="h-3 w-3" /> Re-tailor with my answers
+      </button>
+    </div>
+  );
+}
+
+// The tailored resume as a printed page: greyscale ink on white in both themes, same blocks as the PDF/Word export.
+// Inline colours on purpose: the dark theme remaps text and background classes.
+function ResumePaper({ blocks }: { blocks: DocBlock[] }) {
+  const ink = "#111", muted = "#444", soft = "#555";
+  return (
+    <div className="px-8 sm:px-10 py-8 max-h-[650px] overflow-y-auto text-[0.8rem] leading-relaxed" style={{ background: "#ffffff", color: ink, fontFamily: "'Segoe UI', 'Helvetica Neue', Arial, sans-serif" }}>
+      {blocks.map((b, i) => {
+        switch (b.kind) {
+          case "name": return <h1 key={i} className="text-xl font-bold text-center" style={{ color: ink }}>{b.text}</h1>;
+          case "contact": return <p key={i} className="text-[0.7rem] text-center pb-3 mb-3" style={{ color: muted, borderBottom: "1.5px solid #333" }}>{b.text}</p>;
+          case "heading": return <h2 key={i} className="text-[0.7rem] font-bold uppercase tracking-[1.2px] pb-0.5 mt-4 mb-2" style={{ color: ink, borderBottom: "1px solid #bbb" }}>{b.text}</h2>;
+          case "entry": return (
+            <div key={i} className="flex items-baseline justify-between gap-2 mt-2">
+              <span><b style={{ color: ink }}>{b.title}</b>{b.org && <span style={{ color: muted }}> | {b.org}</span>}</span>
+              {b.right && <span className="text-[0.7rem] whitespace-nowrap" style={{ color: soft }}>{b.right}</span>}
+            </div>
+          );
+          case "bullet": return <p key={i} className="pl-4 -indent-3" style={{ color: ink }}>&bull;&nbsp; {b.text}</p>;
+          case "para": return <p key={i} style={{ color: ink }}>{b.text}</p>;
+          default: return <div key={i} className="h-2" />;
+        }
+      })}
     </div>
   );
 }

@@ -3,6 +3,7 @@ import cors from "cors";
 import path from "node:path";
 import { readCollection, upsert, remove, getSettings, saveSettings, getById, getProfile, saveProfile, getJobsByStatus, listProfiles, profileExists, createProfile, renameProfile, resetProfile, deleteProfile } from "./storage.js";
 import OpenAI from "openai";
+import { guardTailoredResume } from "./resumeGuard.js";
 import { v4 as uuid } from "uuid";
 
 const app = express();
@@ -380,7 +381,7 @@ Format as JSON:
     { "type": "experience", "name": "PROFESSIONAL EXPERIENCE", "entries": [
       { "title": "Job Title", "org": "Company Name", "date": "Jan 2020 - Present", "location": "City, State", "bullets": ["Achievement-focused bullet 1", "Achievement-focused bullet 2", "Achievement-focused bullet 3"] }
     ]},
-    { "type": "skills", "name": "TECHNICAL SKILLS", "lines": ["Languages: Python, JavaScript, TypeScript", "Frameworks: React, Node.js, Django", "Tools: Docker, AWS, Git"] },
+    { "type": "skills", "name": "TECHNICAL SKILLS", "lines": ["Identity & Access: Okta, Azure AD, SAML, OIDC, SCIM", "Cloud & Infrastructure: AWS, Terraform, Docker", "Languages: Python, PowerShell, SQL"] },
     { "type": "education", "name": "EDUCATION", "entries": [
       { "title": "Degree Name", "org": "University Name", "date": "2016 - 2020", "location": "City, State", "bullets": [] }
     ]},
@@ -391,7 +392,10 @@ Format as JSON:
   ],
   "changes_summary": ["list of key changes made"],
   "keywords_added": ["keywords incorporated"],
-  "strategy": "brief overall approach"
+  "strategy": "brief overall approach",
+  "credential_questions": [
+    { "requirement": "Bachelor's degree in Computer Science or related field", "question": "This role asks for a degree in Computer Science or a related field. Do you have a related degree or coursework?" }
+  ]
 }
 
 CRITICAL RULES:
@@ -403,7 +407,16 @@ CRITICAL RULES:
 - Bullet points should be achievement-focused with metrics where possible
 - Tailor content to match the job description keywords and requirements
 - Include ALL jobs/education from original resume - do not remove any
-- The "tailored_resume" field should still contain the full plain-text version as backup`
+- The "tailored_resume" field should still contain the full plain-text version as backup
+
+HONESTY RULES (never break these):
+- Never invent education, degrees, schools, certifications, licenses, employers, job titles or dates. Only use ones that appear in the RESUME or under CANDIDATE-CONFIRMED CREDENTIALS.
+- You may reword or reorder real items, never add new ones.
+- If the job requires or prefers a degree, certification or license that the resume does not show, do NOT add it. Add an entry to "credential_questions" instead, asking the candidate whether they have it or something related. Use an empty array when nothing is missing.
+
+SKILLS FORMAT:
+- Group skills into 3 to 6 category lines, each "Category: skill, skill, skill" (for example "Identity & Access: Okta, SAML, SCIM").
+- Never put one skill per line. Put the skills that match the job description first.`
         },
         { role: "user", content: `RESUME:\n${resumeText}\n\nJOB DESCRIPTION:\n${jobDescription}` }
       ],
@@ -413,6 +426,14 @@ CRITICAL RULES:
     });
     const raw = noDash(completion.choices[0]?.message?.content || "{}");
     const parsed = JSON.parse(raw.replace(/```json?\n?/g, "").replace(/```/g, "").trim());
+    // Enforce the honesty rules: anything not in the resume is dropped and turned into a question.
+    const guard = guardTailoredResume(parsed.structured_sections, resumeText);
+    parsed.structured_sections = guard.sections;
+    const questions = Array.isArray(parsed.credential_questions) ? parsed.credential_questions.filter((q: any) => q?.question) : [];
+    for (const item of guard.removed) {
+      questions.push({ requirement: item, question: `The AI tried to add "${item}", which is not on your resume. Do you have it, or something related?` });
+    }
+    parsed.credential_questions = questions;
     res.json({ ok: true, data: parsed, usage: completion.usage });
   } catch (err: any) {
     console.error("[ai/tailor-resume]", err.message);
