@@ -20,7 +20,7 @@ function Avatar({ p, size = 22 }: { p: Profile; size?: number }) {
   );
 }
 
-export default function ProfileSwitcher({ isDark }: { isDark: boolean }) {
+export default function ProfileSwitcher() {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<Mode>("list");
@@ -72,9 +72,7 @@ export default function ProfileSwitcher({ isDark }: { isDark: boolean }) {
     } else close();
   });
 
-  const C = isDark
-    ? { panel: "#17191e", border: "rgba(255,255,255,0.1)", text: "#f3f4f6", muted: "#8b8f98", hover: "rgba(255,255,255,0.06)", input: "rgba(255,255,255,0.05)" }
-    : { panel: "#ffffff", border: "rgba(10,37,64,0.12)", text: "#0a2540", muted: "#6b7c93", hover: "rgba(10,37,64,0.05)", input: "#f6f9fc" };
+  const C = { panel: "#17191e", border: "rgba(255,255,255,0.1)", text: "#f3f4f6", muted: "#8b8f98", hover: "rgba(255,255,255,0.06)", input: "rgba(255,255,255,0.05)" };
   const item = "w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left text-[0.8rem] transition-colors";
   const hoverOn = (e: React.SyntheticEvent<HTMLElement>) => { e.currentTarget.style.background = C.hover; };
   const hoverOff = (e: React.SyntheticEvent<HTMLElement>) => { e.currentTarget.style.background = "transparent"; };
