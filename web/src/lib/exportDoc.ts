@@ -16,11 +16,11 @@ body{font-family:'Segoe UI','Helvetica Neue',Arial,sans-serif;font-size:10.5pt;l
 table.page{width:100%;border-collapse:collapse}
 table.page td{padding:0 0.7in}
 .m{height:0.55in}
-.name{text-align:center;font-size:18pt;font-weight:700;color:#0a2540;margin-bottom:2px}
-.contact{text-align:center;font-size:9pt;color:#425466;padding-bottom:8px;margin-bottom:10px;border-bottom:2px solid #028FA2}
-h2{font-size:9.5pt;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;color:#028FA2;border-bottom:1px solid #d1d5db;padding-bottom:2px;margin:12px 0 6px;break-after:avoid}
+.name{text-align:center;font-size:18pt;font-weight:700;color:#111;margin-bottom:2px}
+.contact{text-align:center;font-size:9pt;color:#444;padding-bottom:8px;margin-bottom:10px;border-bottom:1.5px solid #333}
+h2{font-size:9.5pt;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;color:#111;border-bottom:1px solid #bbb;padding-bottom:2px;margin:12px 0 6px;break-after:avoid}
 .entry{display:flex;justify-content:space-between;align-items:baseline;margin:6px 0 2px;break-after:avoid}
-.entry b{color:#0a2540}.entry .org{color:#425466}.entry .right{font-size:9pt;color:#6b7280;white-space:nowrap;padding-left:12px}
+.entry b{color:#111}.entry .org{color:#444}.entry .right{font-size:9pt;color:#555;white-space:nowrap;padding-left:12px}
 ul{padding-left:16px;margin:2px 0 6px}li{font-size:10pt;margin:1px 0}
 p{margin:0 0 8px;font-size:10.5pt}
 .gap{height:10px}`;
@@ -57,7 +57,8 @@ export function downloadPDF(title: string, blocks: DocBlock[]): void {
 
 export async function downloadWord(fileName: string, blocks: DocBlock[]): Promise<void> {
   const { Document, Packer, Paragraph, TextRun, AlignmentType, BorderStyle, TabStopType } = await import("docx");
-  const ACCENT = "028FA2", NAVY = "0A2540", MUTED = "425466";
+  // Greyscale on purpose (#32): a resume should print cleanly and look plain.
+  const ACCENT = "333333", NAVY = "111111", MUTED = "444444";
   const RIGHT_TAB = 10080; // twips: 7 inch text width on letter paper with 0.75 inch margins
   const children = blocks.map((b) => {
     switch (b.kind) {
@@ -66,12 +67,12 @@ export async function downloadWord(fileName: string, blocks: DocBlock[]): Promis
       case "contact":
         return new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 160 }, border: { bottom: { style: BorderStyle.SINGLE, size: 12, color: ACCENT, space: 4 } }, children: [new TextRun({ text: b.text, size: 18, color: MUTED })] });
       case "heading":
-        return new Paragraph({ spacing: { before: 200, after: 80 }, keepNext: true, border: { bottom: { style: BorderStyle.SINGLE, size: 4, color: "D1D5DB", space: 2 } }, children: [new TextRun({ text: b.text.toUpperCase(), bold: true, size: 19, color: ACCENT })] });
+        return new Paragraph({ spacing: { before: 200, after: 80 }, keepNext: true, border: { bottom: { style: BorderStyle.SINGLE, size: 4, color: "BBBBBB", space: 2 } }, children: [new TextRun({ text: b.text.toUpperCase(), bold: true, size: 19, color: ACCENT })] });
       case "entry":
         return new Paragraph({ spacing: { before: 100, after: 20 }, keepNext: true, tabStops: [{ type: TabStopType.RIGHT, position: RIGHT_TAB }], children: [
           new TextRun({ text: b.title, bold: true, color: NAVY }),
           ...(b.org ? [new TextRun({ text: ` | ${b.org}`, color: MUTED })] : []),
-          ...(b.right ? [new TextRun({ text: `\t${b.right}`, size: 18, color: "6B7280" })] : []),
+          ...(b.right ? [new TextRun({ text: `\t${b.right}`, size: 18, color: "555555" })] : []),
         ] });
       case "bullet":
         return new Paragraph({ bullet: { level: 0 }, spacing: { after: 20 }, children: [new TextRun({ text: b.text, size: 20 })] });

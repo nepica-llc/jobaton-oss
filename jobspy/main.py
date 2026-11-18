@@ -24,7 +24,8 @@ CACHE_TTL_HOURS = int(os.getenv("CACHE_TTL_HOURS", "6"))
 
 
 def get_cache_key(search_term: str, location: str, site_names: str) -> str:
-    raw = f"{search_term}|{location}|{site_names}".lower().strip()
+    # v2: results now carry full descriptions; older cached results (500 chars, none from LinkedIn) are skipped.
+    raw = f"v2|{search_term}|{location}|{site_names}".lower().strip()
     return hashlib.md5(raw.encode()).hexdigest()
 
 
@@ -80,6 +81,8 @@ def search_jobs(
             results_wanted=results_wanted,
             hours_old=72,
             country_indeed="USA",
+            # Some boards (LinkedIn) return no description unless asked; without it the job has no overview or ATS input.
+            fetch_description=True,
         )
 
         # Convert DataFrame to list of dicts

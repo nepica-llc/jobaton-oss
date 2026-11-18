@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { ScanSearch, Loader2, CheckCircle, AlertTriangle, XCircle, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
+import AtsChecklist from "@/components/AtsChecklist";
 
 export default function ATSScore() {
   const navigate = useNavigate();
@@ -126,6 +127,8 @@ export default function ATSScore() {
               <p className="text-sm text-gray-700">{result.summary}</p>
 
               {/* Keyword Matches */}
+              <AtsChecklist result={result} />
+
               {result.keywordMatches?.length > 0 && (
                 <div>
                   <h3 className="text-sm font-semibold text-gray-900 mb-2">Matched Keywords</h3>

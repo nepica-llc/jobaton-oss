@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { ArrowLeft, ArrowRight, ScanSearch, FileText, Mail, MessageSquare, Loader2, Copy, Sparkles, Check, X, Download, BookOpen, Volume2, VolumeX } from "lucide-react";
+import { ArrowLeft, ArrowRight, ScanSearch, FileText, Mail, MessageSquare, Loader2, Copy, Sparkles, Check, X, Download, BookOpen, Volume2, VolumeX, Video, VideoOff, PhoneOff, Maximize2, Minimize2, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
-import { api } from "@/lib/api";
+import { api, type LessonQueue } from "@/lib/api";
 import LetterPaper from "@/components/LetterPaper";
+import AtsChecklist from "@/components/AtsChecklist";
 import { downloadPDF as exportPDF, downloadWord, textToBlocks, safeFileName, type DocBlock } from "@/lib/exportDoc";
 
 const MOTIVATIONAL_QUOTES = [
@@ -20,6 +21,15 @@ const MOTIVATIONAL_QUOTES = [
   "Dream big. Start small. Act now. - Robin Sharma",
   "Every expert was once a beginner. - Helen Hayes",
 ];
+
+const MIN_DESCRIPTION = 200;
+
+// Short hash of what a score was computed from, to tell when it is out of date.
+function fingerprint(...parts: string[]) {
+  let h = 5381;
+  for (const ch of parts.join("\u0000")) h = ((h << 5) + h + ch.charCodeAt(0)) >>> 0;
+  return h.toString(36);
+}
 
 function getRandomQuote() {
   return MOTIVATIONAL_QUOTES[Math.floor(Math.random() * MOTIVATIONAL_QUOTES.length)];
@@ -133,28 +143,67 @@ export default function JobPrep() {
     return parts.join("\n");
   };
 
+  // Every AI tool reads the job description; some search results arrive without one.
+  const hasDescription = () => {
+    if ((jobRef.current?.raw_description?.trim().length || 0) >= MIN_DESCRIPTION) return true;
+    toast.error(jobRef.current?.raw_description?.trim() ? "The job description is too short. Paste the full posting on the Overview tab." : "Add the job description on the Overview tab first");
+    setActiveTab("overview");
+    return false;
+  };
+
+  const saveDescription = async (text: string) => {
+    const parsed: any = await api.parseJob(text).catch((e) => { toast.error(`Saved, but could not analyze: ${e.message}`); return {}; });
+    const cur = jobRef.current;
+    const updated = {
+      ...cur,
+      raw_description: text,
+      requirements: parsed.requirements?.length ? parsed.requirements : cur.requirements || [],
+      nice_to_have: parsed.nice_to_have?.length ? parsed.nice_to_have : cur.nice_to_have || [],
+      description_summary: parsed.description_summary || cur.description_summary || "",
+      salary: cur.salary || parsed.salary || "",
+    };
+    jobRef.current = updated;
+    setJob(updated);
+    await api.updateJob(id!, updated);
+  };
+
+  // Scores and study guides are built from the extracted requirements, so extract them first if needed.
+  const ensureAnalyzed = async () => {
+    const cur = jobRef.current;
+    if (!cur?.requirements?.length && cur?.raw_description) await saveDescription(cur.raw_description).catch(() => {});
+    return jobRef.current;
+  };
+
   const startLoading = (tab: string) => { setTabLoading(true); setLoadingTab(tab); setLoadingQuote(getRandomQuote()); };
   const stopLoading = () => { setTabLoading(false); setLoadingTab(null); };
 
   const runATS = async () => {
     if (!selectedResumeId) { toast.error("Select a resume first"); return; }
+    if (!hasDescription()) return;
     startLoading("ats");
     try {
-      const result = await api.atsScore(getResumeText(), job.raw_description || "");
-      setAtsResult(result);
-      await persistPrep({ ats: result });
+      const cur = await ensureAnalyzed();
+      const resumeText = getResumeText();
+      const result = await api.atsScore(resumeText, cur.raw_description || "", [...(cur.requirements || []), ...(cur.nice_to_have || [])]);
+      const scored = { ...result, basis: fingerprint(cur.raw_description || "", resumeText) };
+      setAtsResult(scored);
+      await persistPrep({ ats: scored });
     } catch (err: any) { toast.error(err.message); }
     finally { stopLoading(); }
   };
 
-  const runTailor = async () => {
+  // confirmed: credentials the candidate says they have (answers to credential_questions); kept for later runs.
+  const runTailor = async (confirmed?: string) => {
     if (!selectedResumeId) { toast.error("Select a resume first"); return; }
+    if (!hasDescription()) return;
+    const credentials = (confirmed ?? jobRef.current?.prep_data?.confirmed_credentials ?? "").trim();
     startLoading("tailor");
     try {
-      const result = await api.tailorResume(getResumeText(), job.raw_description || "");
+      const resumeText = credentials ? `${getResumeText()}\n\nCANDIDATE-CONFIRMED CREDENTIALS:\n${credentials}` : getResumeText();
+      const result = await api.tailorResume(resumeText, job.raw_description || "");
       setTailorResult(result);
       setAcceptedSuggestions([]);
-      await persistPrep({ tailor: result, accepted_suggestions: [] });
+      await persistPrep({ tailor: result, accepted_suggestions: [], confirmed_credentials: credentials });
     } catch (err: any) { toast.error(err.message); }
     finally { stopLoading(); }
   };
@@ -173,6 +222,7 @@ export default function JobPrep() {
 
   const runCoverLetter = async () => {
     if (!selectedResumeId) { toast.error("Select a resume first"); return; }
+    if (!hasDescription()) return;
     startLoading("cover-letter");
     try {
       const result = await api.coverLetter(getResumeText(), job.raw_description || "", "professional");
@@ -184,21 +234,26 @@ export default function JobPrep() {
   };
 
   const runStudyGuide = async () => {
+    if (!hasDescription()) return;
     startLoading("study-guide");
     try {
-      const result = await api.studyGuide(job.title || "", job.company || "", job.raw_description || "");
+      const cur = await ensureAnalyzed();
+      // Requirements the candidate is missing or weak on (from a current ATS check) come first.
+      const gaps = atsResult?.method === 2 ? (atsResult.requirements || []).filter((r: any) => r.status !== "met").map((r: any) => r.requirement) : [];
+      const result = await api.studyGuide(cur.title || "", cur.company || "", cur.raw_description || "", cur.requirements || [], cur.nice_to_have || [], gaps);
       setStudyGuideResult(result);
       await persistPrep({ study_guide: result });
     } catch (err: any) { toast.error(err.message); }
     finally { stopLoading(); }
   };
 
-  const runInterviewPrep = async (stage: string, interviewer: string) => {
+  const runInterviewPrep = async (stage: string) => {
+    if (!hasDescription()) return;
     startLoading("interview");
     try {
-      const result = await api.interviewPrep(job.title || "", job.company || "", job.raw_description || "", stage, interviewer || undefined);
+      const result = await api.interviewPrep(job.title || "", job.company || "", job.raw_description || "", stage);
       const prev = normalizeInterview(interviewResult);
-      const merged = { stages: { ...prev, [stage]: { ...result, interviewer: interviewer || "" } } };
+      const merged = { stages: { ...prev, [stage]: result } };
       setInterviewResult(merged);
       await persistPrep({ interview: merged });
     } catch (err: any) { toast.error(err.message); }
@@ -251,14 +306,15 @@ export default function JobPrep() {
 
       {/* Tab content */}
       <div className="bg-[#1a1a1a] rounded-xl border border-white/10 p-5 min-h-[300px]">
-        {activeTab === "overview" && <OverviewTab job={job} />}
-        {activeTab === "ats" && <ATSTab result={atsResult} loading={tabLoading} onRun={runATS} />}
+        {activeTab === "overview" && <OverviewTab job={job} onSaveDescription={saveDescription} />}
+        {activeTab === "ats" && <ATSTab result={atsResult} loading={tabLoading} onRun={runATS} currentBasis={fingerprint(job.raw_description || "", getResumeText())} />}
         {activeTab === "tailor" && (
           <TailorTab
             fileBase={safeFileName(job.company, job.title)}
             result={tailorResult}
             loading={tabLoading}
-            onRun={runTailor}
+            onRun={() => runTailor()}
+            onConfirmCredentials={(text) => runTailor(text)}
             acceptedSuggestions={[]}
             onAccept={() => {}}
             onReject={() => {}}
@@ -268,8 +324,8 @@ export default function JobPrep() {
           />
         )}
         {activeTab === "cover-letter" && <CoverLetterTab result={coverLetterResult} loading={tabLoading} onRun={runCoverLetter} fileBase={safeFileName("Cover Letter", job.company, job.title)} />}
-        {activeTab === "study-guide" && <StudyGuideTab result={studyGuideResult} loading={tabLoading} onRun={runStudyGuide} onSave={(training) => { const next = { ...studyGuideResult, training }; setStudyGuideResult(next); persistPrep({ study_guide: next }); }} jobTitle={job.title || ""} jobDescription={job.raw_description || ""} />}
-        {activeTab === "interview" && <InterviewTab result={interviewResult} loading={tabLoading} onRun={runInterviewPrep} jobTitle={job.title || ""} jobDescription={job.raw_description || ""} />}
+        {activeTab === "study-guide" && <StudyGuideTab jobId={job.id} company={job.company || ""} facts={companyFacts} result={studyGuideResult} loading={tabLoading} onRun={runStudyGuide} onSave={(training) => { const next = { ...studyGuideResult, training }; setStudyGuideResult(next); return persistPrep({ study_guide: next }); }} jobDescription={job.raw_description || ""} />}
+        {activeTab === "interview" && <InterviewTab result={interviewResult} loading={tabLoading} onRun={runInterviewPrep} company={job.company || ""} />}
       </div>
 
       {/* ─── Full-screen AI Processing Overlay ─── */}
@@ -303,9 +359,51 @@ export default function JobPrep() {
 }
 
 // ─── Overview Tab ────────────────────────────────────────────────────────────
-function OverviewTab({ job }: { job: any }) {
+function OverviewTab({ job, onSaveDescription }: { job: any; onSaveDescription: (text: string) => Promise<void> }) {
+  const [text, setText] = useState("");
+  const [saving, setSaving] = useState(false);
+  const analyzed = job.description_summary || job.requirements?.length > 0;
+  const autoTried = useRef(false);
+  useEffect(() => {
+    if (analyzed || autoTried.current || !job.raw_description?.trim()) return;
+    autoTried.current = true;
+    save(job.raw_description);
+  }, [analyzed, job.raw_description]);
+  const save = async (value: string) => {
+    if (!value.trim()) return;
+    setSaving(true);
+    try { await onSaveDescription(value.trim()); setText(""); } catch (e: any) { toast.error(e.message); }
+    finally { setSaving(false); }
+  };
+  if (!job.raw_description?.trim()) {
+    return (
+      <div className="space-y-3">
+        <div>
+          <h3 className="text-sm font-semibold text-white">This job has no description yet</h3>
+          <p className="text-xs text-[#888] mt-1">
+            The job board did not include it. Open the{" "}
+            {job.url ? <a href={job.url} target="_blank" rel="noreferrer" className="text-[#028FA2] underline">original posting</a> : "original posting"}
+            , copy the full description and paste it below. ATS score, tailoring, cover letter, study guide and interview prep all use it.
+          </p>
+        </div>
+        <textarea value={text} onChange={(e) => setText(e.target.value)} rows={10} placeholder="Paste the full job description here" aria-label="Job description"
+          className="w-full text-sm bg-white/[0.04] border border-white/10 rounded-lg p-3 text-white placeholder:text-[#555] focus:outline-none focus:border-[#028FA2]" />
+        <button onClick={() => save(text)} disabled={saving || !text.trim()} className="glass-btn-primary flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-md disabled:opacity-50">
+          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />} Save and analyze
+        </button>
+      </div>
+    );
+  }
   return (
     <div className="space-y-4">
+      {!analyzed && (
+        <div className="flex items-center justify-between gap-3 border border-[#028FA2]/20 bg-[#028FA2]/[0.06] rounded-lg p-3">
+          <p className="text-xs text-[#888]">The summary and requirements have not been extracted yet.</p>
+          <button onClick={() => save(job.raw_description)} disabled={saving} className="glass-btn-primary flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-md disabled:opacity-50 shrink-0">
+            {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />} Analyze description
+          </button>
+        </div>
+      )}
       {job.description_summary && (
         <div>
           <h3 className="text-xs font-semibold text-gray-500 uppercase mb-1">Summary</h3>
@@ -347,7 +445,7 @@ function OverviewTab({ job }: { job: any }) {
 }
 
 // ─── ATS Tab ─────────────────────────────────────────────────────────────────
-function ATSTab({ result, loading, onRun }: { result: any; loading: boolean; onRun: () => void }) {
+function ATSTab({ result, loading, onRun, currentBasis }: { result: any; loading: boolean; onRun: () => void; currentBasis: string }) {
   if (!result && !loading) {
     return (
       <div className="text-center py-8">
@@ -359,6 +457,8 @@ function ATSTab({ result, loading, onRun }: { result: any; loading: boolean; onR
   }
   if (loading) return <LoadingState text="Analyzing..." />;
 
+  const legacy = result?.method !== 2;
+  const stale = !legacy && result?.basis && result.basis !== currentBasis;
   const score = result?.score || 0;
   const ringColor = score >= 80 ? "#22c55e" : score >= 60 ? "#eab308" : "#ef4444";
   const verdictColor = score >= 80 ? "text-green-400 bg-green-500/10 border-green-500/20" : score >= 60 ? "text-amber-400 bg-amber-500/10 border-amber-500/20" : "text-red-400 bg-red-500/10 border-red-500/20";
@@ -378,7 +478,7 @@ function ATSTab({ result, loading, onRun }: { result: any; loading: boolean; onR
         <div className="flex items-center gap-4">
           <div className="relative w-20 h-20">
             <svg className="w-20 h-20 -rotate-90" viewBox="0 0 80 80">
-              <circle cx="40" cy="40" r="34" fill="none" stroke="#e5e7eb" strokeWidth="6" />
+              <circle cx="40" cy="40" r="34" fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="6" />
               <circle cx="40" cy="40" r="34" fill="none" stroke={ringColor} strokeWidth="6" strokeDasharray={`${(score / 100) * 213.6} 213.6`} strokeLinecap="round" />
             </svg>
             <span className="absolute inset-0 flex items-center justify-center text-2xl font-bold text-white">{score}</span>
@@ -390,6 +490,19 @@ function ATSTab({ result, loading, onRun }: { result: any; loading: boolean; onR
         </div>
         <button onClick={onRun} className="text-xs text-[#028FA2] hover:underline shrink-0">Re-run</button>
       </div>
+
+      {(legacy || stale) && (
+        <div className="flex items-center justify-between gap-3 p-3 rounded-lg border border-amber-500/30 bg-amber-500/[0.08]">
+          <p className="text-xs text-amber-200">
+            {legacy
+              ? "This score was made with the old method, which did not check the job description properly. Do not rely on it. Run the scan again."
+              : "The job description or your resume has changed since this scan. Run it again for a current score."}
+          </p>
+          <button onClick={onRun} className="glass-btn-primary px-3 py-1.5 text-xs font-medium rounded-md shrink-0">Scan again</button>
+        </div>
+      )}
+
+      <AtsChecklist result={result} />
 
       {/* Section Breakdown */}
       <div>
@@ -507,8 +620,8 @@ function ATSTab({ result, loading, onRun }: { result: any; loading: boolean; onR
 }
 
 // ─── Tailor Resume Tab ───────────────────────────────────────────────────────
-function TailorTab({ result, loading, onRun, fileBase }: {
-  result: any; loading: boolean; onRun: () => void; fileBase: string;
+function TailorTab({ result, loading, onRun, onConfirmCredentials, fileBase }: {
+  result: any; loading: boolean; onRun: () => void; onConfirmCredentials: (text: string) => void; fileBase: string;
   acceptedSuggestions: number[]; onAccept: (i: number) => void; onReject: (i: number) => void;
   atsScore: number | undefined; getResumeText: () => string; jobDescription: string;
 }) {
@@ -544,8 +657,10 @@ function TailorTab({ result, loading, onRun, fileBase }: {
   const onWord = () => { if (hasResume) downloadWord(resumeName(), buildBlocks()).catch((e) => toast.error(e.message)); };
 
   const copyToClipboard = () => {
-    if (!result?.tailored_resume) return;
-    navigator.clipboard.writeText(result.tailored_resume);
+    if (!hasResume) return;
+    // From the checked sections, not the AI's plain-text copy, so removed credentials stay out.
+    const text = buildBlocks().map((b) => b.kind === "entry" ? [b.title, b.org, b.right].filter(Boolean).join(" | ") : b.kind === "bullet" ? `- ${b.text}` : b.kind === "heading" ? `\n${b.text.toUpperCase()}` : "text" in b ? b.text : "").join("\n");
+    navigator.clipboard.writeText(text.trim());
     toast.success("Resume copied to clipboard!");
   };
 
@@ -586,6 +701,8 @@ function TailorTab({ result, loading, onRun, fileBase }: {
         </div>
       )}
 
+      {result?.credential_questions?.length > 0 && <CredentialQuestions questions={result.credential_questions} onSubmit={onConfirmCredentials} />}
+
       {/* Changes + Keywords row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {result?.changes_summary?.length > 0 && (
@@ -614,63 +731,59 @@ function TailorTab({ result, loading, onRun, fileBase }: {
           <span className="text-xs font-semibold text-[#888] uppercase">Resume Preview</span>
           <span className="text-[0.667rem] text-[#555]">Download as PDF, or as Word to keep editing</span>
         </div>
-        <div className="bg-[#1a1a1a] px-10 py-8 max-h-[650px] overflow-y-auto">
-          {sections.length > 0 ? (
-            <div className="space-y-0">
-              {sections.map((sec: any, si: number) => {
-                if (sec.type === "header") {
-                  return (
-                    <div key={si} className="text-center pb-3 mb-3 border-b-2 border-[#028FA2]">
-                      <h1 className="text-xl font-bold text-white">{sec.lines?.[0]}</h1>
-                      {sec.lines?.slice(1).map((l: string, li: number) => (
-                        <p key={li} className="text-[0.667rem] text-[#888] mt-0.5">{l}</p>
-                      ))}
-                    </div>
-                  );
-                }
-                if (sec.entries?.length > 0) {
-                  return (
-                    <div key={si} className="mt-3">
-                      <h2 className="text-[0.667rem] font-bold uppercase tracking-[1.2px] text-[#028FA2] border-b border-white/10 pb-1 mb-2">{sec.name}</h2>
-                      {sec.entries.map((entry: any, ei: number) => (
-                        <div key={ei} className="mb-2.5">
-                          <div className="flex items-baseline justify-between gap-2">
-                            <div>
-                              <span className="text-sm font-bold text-white">{entry.title}</span>
-                              {entry.org && <span className="text-sm text-[#888]"> | {entry.org}</span>}
-                            </div>
-                            <span className="text-[0.667rem] text-[#555] whitespace-nowrap">{[entry.date, entry.location].filter(Boolean).join(" | ")}</span>
-                          </div>
-                          {entry.bullets?.length > 0 && (
-                            <ul className="mt-0.5 ml-4 space-y-0">
-                              {entry.bullets.map((b: string, bi: number) => (
-                                <li key={bi} className="text-[0.733rem] text-[#1a1a1a] list-disc leading-relaxed">{b}</li>
-                              ))}
-                            </ul>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  );
-                }
-                if (sec.lines?.length > 0) {
-                  return (
-                    <div key={si} className="mt-3">
-                      <h2 className="text-[0.667rem] font-bold uppercase tracking-[1.2px] text-[#028FA2] border-b border-white/10 pb-1 mb-2">{sec.name}</h2>
-                      {sec.lines.map((l: string, li: number) => (
-                        <p key={li} className="text-[0.733rem] text-[#1a1a1a] leading-relaxed">{l}</p>
-                      ))}
-                    </div>
-                  );
-                }
-                return null;
-              })}
-            </div>
-          ) : result?.tailored_resume ? (
-            <pre className="text-sm text-gray-700 whitespace-pre-wrap font-sans leading-relaxed">{result.tailored_resume}</pre>
-          ) : null}
-        </div>
+        <ResumePaper blocks={buildBlocks()} />
       </div>
+    </div>
+  );
+}
+
+// Requirements the resume does not show. The AI may not invent them (#30), so the candidate is asked instead.
+function CredentialQuestions({ questions, onSubmit }: { questions: { requirement: string; question: string }[]; onSubmit: (text: string) => void }) {
+  const [answers, setAnswers] = useState<string[]>(() => questions.map(() => ""));
+  const filled = answers.map((a) => a.trim()).filter(Boolean);
+  return (
+    <div className="p-4 rounded-lg border border-amber-500/30 bg-amber-500/[0.06] space-y-3">
+      <div>
+        <h4 className="text-sm font-semibold text-white">Do you have these?</h4>
+        <p className="text-xs text-[#888] mt-0.5">The job asks for credentials that are not on your resume. We never add degrees or certifications you have not confirmed. If you have one, or something related, type it exactly as it should appear.</p>
+      </div>
+      {questions.map((q, i) => (
+        <label key={i} className="block">
+          <span className="text-xs text-white">{q.question}</span>
+          <input value={answers[i]} onChange={(e) => setAnswers((a) => a.map((v, j) => (j === i ? e.target.value : v)))}
+            placeholder="e.g. B.S. Information Systems, Texas A&M University, 2016 (leave blank if not)"
+            className="mt-1 w-full text-sm bg-white/[0.04] border border-white/10 rounded-md px-3 py-1.5 text-white placeholder:text-[#555] focus:outline-none focus:border-[#028FA2]" />
+        </label>
+      ))}
+      <button onClick={() => onSubmit(filled.join("\n"))} disabled={filled.length === 0} className="glass-btn-primary flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md disabled:opacity-50">
+        <Sparkles className="h-3 w-3" /> Re-tailor with my answers
+      </button>
+    </div>
+  );
+}
+
+// The tailored resume as a printed page: greyscale ink on white in both themes, same blocks as the PDF/Word export.
+// Inline colours on purpose: the dark theme remaps text and background classes.
+function ResumePaper({ blocks }: { blocks: DocBlock[] }) {
+  const ink = "#111", muted = "#444", soft = "#555";
+  return (
+    <div className="px-8 sm:px-10 py-8 max-h-[650px] overflow-y-auto text-[0.8rem] leading-relaxed" style={{ background: "#ffffff", color: ink, fontFamily: "'Segoe UI', 'Helvetica Neue', Arial, sans-serif" }}>
+      {blocks.map((b, i) => {
+        switch (b.kind) {
+          case "name": return <h1 key={i} className="text-xl font-bold text-center" style={{ color: ink }}>{b.text}</h1>;
+          case "contact": return <p key={i} className="text-[0.7rem] text-center pb-3 mb-3" style={{ color: muted, borderBottom: "1.5px solid #333" }}>{b.text}</p>;
+          case "heading": return <h2 key={i} className="text-[0.7rem] font-bold uppercase tracking-[1.2px] pb-0.5 mt-4 mb-2" style={{ color: ink, borderBottom: "1px solid #bbb" }}>{b.text}</h2>;
+          case "entry": return (
+            <div key={i} className="flex items-baseline justify-between gap-2 mt-2">
+              <span><b style={{ color: ink }}>{b.title}</b>{b.org && <span style={{ color: muted }}> | {b.org}</span>}</span>
+              {b.right && <span className="text-[0.7rem] whitespace-nowrap" style={{ color: soft }}>{b.right}</span>}
+            </div>
+          );
+          case "bullet": return <p key={i} className="pl-4 -indent-3" style={{ color: ink }}>&bull;&nbsp; {b.text}</p>;
+          case "para": return <p key={i} style={{ color: ink }}>{b.text}</p>;
+          default: return <div key={i} className="h-2" />;
+        }
+      })}
     </div>
   );
 }
@@ -715,6 +828,7 @@ interface TrainingModule {
   skill: string;
   title: string;
   description: string;
+  requirements?: string[];
   lessons: Lesson[];
 }
 interface Lesson {
@@ -749,6 +863,7 @@ function buildModulesFromGuide(data: any): TrainingModule[] {
     skill: mod.title,
     title: mod.title,
     description: mod.description || "",
+    requirements: Array.isArray(mod.requirements) ? mod.requirements : [],
     lessons: LESSON_TEMPLATES.map((t) => ({
       ...t,
       description: `${t.title} for ${mod.title}`,
@@ -767,12 +882,12 @@ function studyReadiness(modules: TrainingModule[]) {
   return { readiness: Math.round(accuracy * coverage * 100), accuracy: Math.round(accuracy * 100), coverage: Math.round(coverage * 100), tested: scored.length, lessons: lessons.length };
 }
 
-function StudyGuideTab({ result, loading, onRun, onSave, jobTitle, jobDescription }: { result: any; loading: boolean; onRun: () => void; onSave: (training: TrainingModule[]) => void; jobTitle?: string; jobDescription?: string }) {
+const stripRuntime = (modules: TrainingModule[]) => modules.map((m) => ({ ...m, lessons: m.lessons.map(({ generating, ...l }) => l) }));
+
+function StudyGuideTab({ jobId, company, facts, result, loading, onRun, onSave, jobDescription }: { jobId: string; company: string; facts: string[]; result: any; loading: boolean; onRun: () => void; onSave: (training: TrainingModule[]) => Promise<void>; jobDescription?: string }) {
   const [modules, setModules] = useState<TrainingModule[]>([]);
   const [openModuleIdx, setOpenModuleIdx] = useState<number | null>(null);
   const [activeLesson, setActiveLesson] = useState<{ mod: number; lesson: number } | null>(null);
-  const [generatingAll, setGeneratingAll] = useState(false);
-  const [genProgress, setGenProgress] = useState({ done: 0, total: 0 });
   const [showPodcastModal, setShowPodcastModal] = useState(false);
 
   // Rebuild only when the outline changes (a new study guide), not when progress is saved back into result.
@@ -791,7 +906,7 @@ function StudyGuideTab({ result, loading, onRun, onSave, jobTitle, jobDescriptio
     if (!dirty.current) return;
     const t = setTimeout(() => {
       dirty.current = false;
-      onSaveRef.current(modules.map((m) => ({ ...m, lessons: m.lessons.map(({ generating, ...l }) => l) })));
+      onSaveRef.current(stripRuntime(modules));
     }, 800);
     return () => clearTimeout(t);
   }, [modules]);
@@ -803,57 +918,87 @@ function StudyGuideTab({ result, loading, onRun, onSave, jobTitle, jobDescriptio
     );
   }, []);
 
-  const openLessonContent = useCallback(async (modIdx: number, lessonIdx: number) => {
-    const mod = modules[modIdx];
-    const lesson = mod?.lessons[lessonIdx];
+  // Lessons are generated by the server one after another and saved to the job, so the user can leave
+  // this page (or the app) and come back. This tab only queues them and polls for progress.
+  const modulesRef = useRef(modules);
+  modulesRef.current = modules;
+  const openWhenReady = useRef<string | null>(null);
+  const reportedFailures = useRef(new Set<string>());
+
+  const applyQueue = useCallback(async (q: LessonQueue) => {
+    const pending = new Set(q.pending);
+    const needsContent = modulesRef.current.some((m, mi) => m.lessons.some((l, li) => l.generating && !pending.has(`${mi}:${li}`)));
+    const saved: TrainingModule[] | undefined = needsContent ? (await api.getJob(jobId).catch(() => null))?.prep_data?.study_guide?.training : undefined;
+    for (const f of q.failed) {
+      if (reportedFailures.current.has(f.key)) continue;
+      reportedFailures.current.add(f.key);
+      toast.error(`A lesson could not be generated: ${f.error}`);
+    }
+    setModules((prev) => prev.map((m, mi) => ({
+      ...m,
+      lessons: m.lessons.map((l, li) => {
+        const key = `${mi}:${li}`;
+        const fromServer = saved?.[mi]?.lessons?.[li];
+        const content = !l.sections?.length && fromServer?.sections?.length
+          ? { sections: fromServer.sections, keyPoints: fromServer.keyPoints || [], practicePrompt: fromServer.practicePrompt || "", quiz: fromServer.quiz || [] }
+          : {};
+        return { ...l, ...content, generating: pending.has(key) };
+      }),
+    })));
+    const want = openWhenReady.current;
+    if (want && !pending.has(want)) {
+      openWhenReady.current = null;
+      const [mi, li] = want.split(":").map(Number);
+      if (saved?.[mi]?.lessons?.[li]?.sections?.length) setActiveLesson({ mod: mi, lesson: li });
+    }
+  }, [jobId]);
+
+  const queueLessons = useCallback(async (items: { mod: number; lesson: number; fresh?: boolean }[]) => {
+    if (items.length === 0) return;
+    try {
+      // The server reads the module outline from the job, so save it first.
+      dirty.current = false;
+      await onSaveRef.current(stripRuntime(modulesRef.current));
+      reportedFailures.current.clear();
+      await applyQueue(await api.queueLessons(jobId, items));
+    } catch (err: any) {
+      toast.error(err.message || "Failed to start generating lessons");
+    }
+  }, [jobId, applyQueue]);
+
+  const anyGenerating = modules.some((m) => m.lessons.some((l) => l.generating));
+  useEffect(() => {
+    if (!anyGenerating) return;
+    const t = setInterval(() => { api.lessonStatus(jobId).then(applyQueue).catch(() => {}); }, 3000);
+    return () => clearInterval(t);
+  }, [anyGenerating, jobId, applyQueue]);
+
+  // Coming back to the page while lessons are still being generated: pick the queue up again.
+  const hasModules = modules.length > 0;
+  useEffect(() => {
+    if (hasModules) api.lessonStatus(jobId).then((q) => { if (q.pending.length) applyQueue(q); }).catch(() => {});
+  }, [hasModules, jobId, applyQueue]);
+
+  const openLessonContent = useCallback((modIdx: number, lessonIdx: number) => {
+    const lesson = modules[modIdx]?.lessons[lessonIdx];
     if (!lesson) return;
     if (lesson.sections && lesson.sections.length > 0) {
       setActiveLesson({ mod: modIdx, lesson: lessonIdx });
       return;
     }
-    updateLessonState(modIdx, lessonIdx, { generating: true });
-    try {
-      const allTitles = mod.lessons.map((l) => l.title);
-      const res = await api.generateLesson(mod.skill, jobTitle || "", "", lesson.title, lesson.type, allTitles);
-      const content = res?.lesson || res?.data?.lesson || res;
-      updateLessonState(modIdx, lessonIdx, {
-        sections: content.sections || [],
-        keyPoints: content.keyPoints || [],
-        practicePrompt: content.practicePrompt || "",
-        quiz: content.quiz || [],
-        generating: false,
-      });
-      setActiveLesson({ mod: modIdx, lesson: lessonIdx });
-    } catch (err: any) {
-      toast.error(err.message || "Failed to generate lesson");
-      updateLessonState(modIdx, lessonIdx, { generating: false });
-    }
-  }, [modules, jobTitle, updateLessonState]);
+    openWhenReady.current = `${modIdx}:${lessonIdx}`;
+    queueLessons([{ mod: modIdx, lesson: lessonIdx }]);
+  }, [modules, queueLessons]);
 
-  const handleGenerateAll = useCallback(async () => {
-    setGeneratingAll(true);
-    const total = modules.reduce((a, m) => a + m.lessons.length, 0);
-    setGenProgress({ done: 0, total });
-    let done = 0;
-    for (let mi = 0; mi < modules.length; mi++) {
-      const mod = modules[mi];
-      for (let li = 0; li < mod.lessons.length; li++) {
-        const lesson = mod.lessons[li];
-        if (lesson.sections && lesson.sections.length > 0) { done++; setGenProgress({ done, total }); continue; }
-        updateLessonState(mi, li, { generating: true });
-        try {
-          const allTitles = mod.lessons.map((l) => l.title);
-          const res = await api.generateLesson(mod.skill, jobTitle || "", "", lesson.title, lesson.type, allTitles);
-          const content = res?.lesson || res?.data?.lesson || res;
-          updateLessonState(mi, li, { sections: content.sections || [], keyPoints: content.keyPoints || [], practicePrompt: content.practicePrompt || "", quiz: content.quiz || [], generating: false });
-        } catch { updateLessonState(mi, li, { generating: false }); }
-        done++;
-        setGenProgress({ done, total });
-      }
-    }
-    setGeneratingAll(false);
-    toast.success("All training content generated!");
-  }, [modules, jobTitle, updateLessonState]);
+  const missingLessons = (modIdx?: number) => modules.flatMap((m, mi) =>
+    modIdx !== undefined && mi !== modIdx ? [] : m.lessons.flatMap((l, li) => (l.sections?.length || l.generating ? [] : [{ mod: mi, lesson: li }])));
+  const regenerateLesson = (mi: number, li: number) => {
+    setActiveLesson(null);
+    updateLessonState(mi, li, { sections: [], keyPoints: [], quiz: [], quizScore: undefined });
+    openWhenReady.current = `${mi}:${li}`;
+    queueLessons([{ mod: mi, lesson: li, fresh: true }]);
+  };
+  const handleGenerateAll = () => { openWhenReady.current = null; queueLessons(missingLessons()); };
 
   const handleLessonComplete = useCallback(() => {
     if (!activeLesson) return;
@@ -887,7 +1032,8 @@ function StudyGuideTab({ result, loading, onRun, onSave, jobTitle, jobDescriptio
   const totalLessons = modules.reduce((a, m) => a + m.lessons.length, 0);
   const completedLessons = modules.reduce((a, m) => a + m.lessons.filter((l) => l.completed).length, 0);
   const progress = totalLessons > 0 ? Math.round((completedLessons / totalLessons) * 100) : 0;
-  const trainingGenerated = modules.some((m) => m.lessons.some((l) => l.sections && l.sections.length > 0));
+  const readyLessons = modules.reduce((a, m) => a + m.lessons.filter((l) => l.sections?.length).length, 0);
+  const generatingCount = modules.reduce((a, m) => a + m.lessons.filter((l) => l.generating).length, 0);
 
   // ─── LESSON PLAYER (full-screen overlay) ───
   if (activeLesson) {
@@ -903,6 +1049,7 @@ function StudyGuideTab({ result, loading, onRun, onSave, jobTitle, jobDescriptio
           onClose={() => setActiveLesson(null)}
           onComplete={() => { handleLessonComplete(); setActiveLesson(null); }}
           onQuizScored={handleQuizScored}
+          onRegenerate={() => regenerateLesson(activeLesson.mod, activeLesson.lesson)}
         />
       );
     }
@@ -925,12 +1072,22 @@ function StudyGuideTab({ result, loading, onRun, onSave, jobTitle, jobDescriptio
             <p className="text-[0.667rem] uppercase tracking-wider text-[#028FA2] font-bold">Module {openModuleIdx + 1}</p>
             <h3 className="text-lg font-bold text-white">{mod.title}</h3>
             <p className="text-xs text-gray-500">{mod.description}</p>
+            {mod.requirements && mod.requirements.length > 0 && (
+              <p className="text-[0.7rem] text-[#888] mt-1"><span className="text-[#2dd4bf] font-semibold">Prepares you for:</span> {mod.requirements.join("; ")}</p>
+            )}
           </div>
         </div>
         <div className="w-full bg-gray-100 rounded-full h-2">
           <div className="bg-[#028FA2] h-2 rounded-full transition-all" style={{ width: `${(completedCount / mod.lessons.length) * 100}%` }} />
         </div>
         <p className="text-xs text-gray-500">{completedCount} of {mod.lessons.length} lessons completed</p>
+        {anyGenerating ? (
+          <LessonsGeneratingBanner count={generatingCount} facts={facts} company={company} />
+        ) : mod.lessons.some((l) => !l.sections?.length) && (
+          <button onClick={() => { openWhenReady.current = null; queueLessons(missingLessons(openModuleIdx)); }} className="glass-btn-primary flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md">
+            <Sparkles className="h-3 w-3" /> Generate all lessons in this module
+          </button>
+        )}
         <div className="grid gap-3 sm:grid-cols-2">
           {mod.lessons.map((lesson, li) => {
             const hasContent = lesson.sections && lesson.sections.length > 0;
@@ -1018,27 +1175,24 @@ function StudyGuideTab({ result, loading, onRun, onSave, jobTitle, jobDescriptio
         );
       })()}
 
-      {/* Generate All button */}
-      {!trainingGenerated && modules.length > 0 && (
-        <div className="border border-[#028FA2]/20 rounded-xl p-4 bg-[#028FA2]/10/50">
-          <div className="flex items-center justify-between">
-            <div>
-              <h4 className="text-sm font-semibold text-white flex items-center gap-1.5"><Sparkles className="h-4 w-4" /> Generate All Training</h4>
-              <p className="text-xs text-[#028FA2] mt-0.5">{modules.length} modules · {totalLessons} lessons. Generate all content so you can study offline.</p>
-            </div>
-            <button
-              onClick={handleGenerateAll}
-              disabled={generatingAll}
-              className="px-3 py-1.5 text-xs font-medium text-white bg-[#028FA2] rounded-lg hover:bg-[#027a8c] disabled:opacity-50 flex items-center gap-1.5"
-            >
-              {generatingAll ? <><Loader2 className="h-3 w-3 animate-spin" /> {genProgress.done}/{genProgress.total}</> : <><Sparkles className="h-3 w-3" /> Generate All</>}
-            </button>
+      {result?.coverage?.total > 0 && (
+        <div className={`p-3 rounded-lg border text-xs ${result.coverage.uncovered.length ? "border-amber-500/30 bg-amber-500/[0.08] text-amber-200" : "border-green-500/25 bg-green-500/[0.06] text-green-300"}`}>
+          <p className="font-semibold">Covers {result.coverage.covered.length} of {result.coverage.total} job requirements</p>
+          {result.coverage.uncovered.length > 0 && <p className="mt-1">Not covered yet: {result.coverage.uncovered.join("; ")}. Re-generate the guide to try again.</p>}
+        </div>
+      )}
+
+      {anyGenerating ? (
+        <LessonsGeneratingBanner count={generatingCount} facts={facts} company={company} done={readyLessons} total={totalLessons} />
+      ) : readyLessons < totalLessons && modules.length > 0 && (
+        <div className="border border-[#028FA2]/20 rounded-xl p-4 bg-[#028FA2]/[0.06] flex items-center justify-between gap-3">
+          <div>
+            <h4 className="text-sm font-semibold text-white flex items-center gap-1.5"><Sparkles className="h-4 w-4" /> Generate all lessons</h4>
+            <p className="text-xs text-[#888] mt-0.5">{readyLessons} of {totalLessons} lessons ready. They generate in the background, so you can leave this page.</p>
           </div>
-          {generatingAll && (
-            <div className="mt-2 w-full bg-[#028FA2]/10 rounded-full h-1.5">
-              <div className="bg-[#028FA2] h-1.5 rounded-full transition-all" style={{ width: `${genProgress.total > 0 ? (genProgress.done / genProgress.total) * 100 : 0}%` }} />
-            </div>
-          )}
+          <button onClick={handleGenerateAll} className="px-3 py-1.5 text-xs font-medium text-white bg-[#028FA2] rounded-lg hover:bg-[#027a8c] flex items-center gap-1.5 shrink-0">
+            <Sparkles className="h-3 w-3" /> Generate all
+          </button>
         </div>
       )}
 
@@ -1068,6 +1222,12 @@ function StudyGuideTab({ result, loading, onRun, onSave, jobTitle, jobDescriptio
                 <div className="flex-1 min-w-0">
                   <h4 className={`text-sm font-semibold ${isModDone ? "line-through" : ""}`}>{mod.title}</h4>
                   <p className="text-[0.667rem] text-gray-500 mt-0.5 line-clamp-2">{mod.description}</p>
+                  {mod.requirements && mod.requirements.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-1.5">
+                      {mod.requirements.slice(0, 2).map((r) => <span key={r} className="text-[0.6rem] px-1.5 py-0.5 rounded bg-[#028FA2]/10 text-[#2dd4bf] truncate max-w-[12rem]" title={r}>{r}</span>)}
+                      {mod.requirements.length > 2 && <span className="text-[0.6rem] px-1.5 py-0.5 rounded bg-white/[0.06] text-[#888]" title={mod.requirements.slice(2).join("; ")}>+{mod.requirements.length - 2}</span>}
+                    </div>
+                  )}
                   <p className="text-[0.667rem] text-gray-400 mt-1.5">{modCompleted}/{modTotal} lessons</p>
                 </div>
               </div>
@@ -1131,8 +1291,8 @@ function toCards(sections: { heading: string; body: string; codeSnippet?: string
 
 const canSpeak = typeof window !== "undefined" && "speechSynthesis" in window;
 
-function LessonPlayerInline({ lesson, moduleTitle, lessonIndex, totalLessons, onClose, onComplete, onQuizScored }: {
-  lesson: Lesson; moduleTitle: string; lessonIndex: number; totalLessons: number; onClose: () => void; onComplete: () => void; onQuizScored: (score: { correct: number; total: number }) => void;
+function LessonPlayerInline({ lesson, moduleTitle, lessonIndex, totalLessons, onClose, onComplete, onQuizScored, onRegenerate }: {
+  lesson: Lesson; moduleTitle: string; lessonIndex: number; totalLessons: number; onClose: () => void; onComplete: () => void; onQuizScored: (score: { correct: number; total: number }) => void; onRegenerate: () => void;
 }) {
   const [currentStep, setCurrentStep] = useState(0);
   const [quizAnswers, setQuizAnswers] = useState<Record<number, number>>({});
@@ -1184,7 +1344,9 @@ function LessonPlayerInline({ lesson, moduleTitle, lessonIndex, totalLessons, on
           <p className="text-[0.667rem] text-[#555]">{moduleTitle} · Lesson {lessonIndex + 1}/{totalLessons}</p>
           <h3 className="text-sm font-semibold text-white">{lesson.title}</h3>
         </div>
-        <div className="w-16" />
+        <button onClick={() => { stopSpeaking(); onRegenerate(); }} className="text-xs text-[#028FA2] hover:underline" title="Write this lesson again with new content and questions">
+          Regenerate
+        </button>
       </div>
 
       {/* Step progress bar */}
@@ -1342,78 +1504,45 @@ function parseStageQuestions(data: any) {
         { label: "Partially correct", correct: false },
       ];
       if (!opts.some((o: any) => o.correct)) opts[0].correct = true;
+      shuffleStable(opts, q.question);
       all.push({ question: q.question, options: opts, timeLimit: q.timeLimit || defaultTime, difficulty: diff, explanation: q.explanation || "" });
     });
   });
   const order: Record<string, number> = { easy: 0, medium: 1, hard: 2 };
   all.sort((a, b) => order[a.difficulty] - order[b.difficulty]);
-  return { all, overview: data?.overview || "", tips: (data?.tips || []) as string[], insights: (data?.interviewerInsights || []) as string[] };
+  return { all, overview: data?.overview || "", tips: (data?.tips || []) as string[] };
 }
 
-function InterviewTab({ result, loading, onRun }: { result: any; loading: boolean; onRun: (stage: string, interviewer: string) => void; jobTitle?: string; jobDescription?: string }) {
+// AIs tend to list the right answer first. Shuffle with a seed from the question text so the order
+// is mixed but stays the same on every render and every retake.
+function shuffleStable<T>(items: T[], seedText: string) {
+  let seed = 0;
+  for (let i = 0; i < seedText.length; i++) seed = (seed * 31 + seedText.charCodeAt(i)) >>> 0;
+  for (let i = items.length - 1; i > 0; i--) {
+    seed = (seed * 1664525 + 1013904223) >>> 0;
+    const j = seed % (i + 1);
+    [items[i], items[j]] = [items[j], items[i]];
+  }
+}
+
+function InterviewTab({ result, loading, onRun, company }: { result: any; loading: boolean; onRun: (stage: string) => void; company: string }) {
   const stages = normalizeInterview(result);
   const tabs = [...(stages.general ? [{ key: "general", label: "General", desc: "Your earlier interview prep." }] : []), ...INTERVIEW_STAGES];
   const [stage, setStage] = useState<string>(() => tabs.find((t) => stages[t.key])?.key || "recruiter");
-  const [interviewer, setInterviewer] = useState<Record<string, string>>(() =>
-    Object.fromEntries(Object.entries(stages).map(([k, v]: [string, any]) => [k, v?.interviewer || ""])));
   const [mode, setMode] = useState<"lobby" | "zone" | "review">("lobby");
-  const [currentQ, setCurrentQ] = useState(0);
+  const [attempt, setAttempt] = useState(0);
   const [answers, setAnswers] = useState<Record<number, number>>({});
-  const [timeLeft, setTimeLeft] = useState(0);
   const [totalTime, setTotalTime] = useState(0);
-  const [showExplanation, setShowExplanation] = useState(false);
 
   const stageData = stages[stage];
   const stageInfo = tabs.find((t) => t.key === stage)!;
   const parsed = parseStageQuestions(stageData);
   const questions = parsed.all;
 
-  // Timer per question
-  useEffect(() => {
-    if (mode !== "zone") return;
-    setTimeLeft(questions[currentQ]?.timeLimit || 30);
-    setShowExplanation(false);
-  }, [currentQ, mode]);
-
-  // Global timer
-  useEffect(() => {
-    if (mode !== "zone") return;
-    const t = setInterval(() => setTotalTime((p) => p + 1), 1000);
-    return () => clearInterval(t);
-  }, [mode]);
-
-  useEffect(() => {
-    if (mode !== "zone" || timeLeft <= 0) {
-      if (timeLeft === 0 && mode === "zone" && answers[currentQ] === undefined) {
-        // Auto-skip on timeout
-        setAnswers((p) => ({ ...p, [currentQ]: -1 }));
-        setShowExplanation(true);
-      }
-      return;
-    }
-    const t = setTimeout(() => setTimeLeft((p) => p - 1), 1000);
-    return () => clearTimeout(t);
-  }, [timeLeft, mode]);
-
-  const handleSelect = (optIdx: number) => {
-    if (answers[currentQ] !== undefined) return;
-    setAnswers((p) => ({ ...p, [currentQ]: optIdx }));
-    setShowExplanation(true);
-  };
-
-  const handleNext = () => {
-    if (currentQ < questions.length - 1) {
-      setCurrentQ((p) => p + 1);
-      setShowExplanation(false);
-    } else {
-      setMode("review");
-    }
-  };
-
   const startInterview = () => {
-    setCurrentQ(0);
     setAnswers({});
     setTotalTime(0);
+    setAttempt((n) => n + 1);
     setMode("zone");
   };
 
@@ -1486,106 +1615,28 @@ function InterviewTab({ result, loading, onRun }: { result: any; loading: boolea
         </details>
 
         <div className="flex gap-3">
-          <button onClick={() => { setMode("lobby"); setCurrentQ(0); setAnswers({}); }} className="flex-1 px-4 py-2.5 text-sm font-medium text-[#888] bg-white/[0.04] border border-white/10 rounded-xl hover:bg-gray-100">Back to rounds</button>
+          <button onClick={() => { setMode("lobby"); setAnswers({}); }} className="flex-1 px-4 py-2.5 text-sm font-medium text-[#888] bg-white/[0.04] border border-white/10 rounded-xl hover:bg-gray-100">Back to rounds</button>
           <button onClick={startInterview} className="flex-1 px-4 py-2.5 text-sm font-medium text-white bg-[#028FA2] rounded-xl hover:bg-[#027a8c]">Retake</button>
         </div>
       </div>
     );
   }
 
-  // ─── INTERVIEW ZONE (timed mode) ───
+  // ─── INTERVIEW CALL ───
   if (mode === "zone" && questions.length > 0) {
-    const q = questions[currentQ];
-    const selected = answers[currentQ];
-    const diffColor = q?.difficulty === "easy" ? "text-green-600" : q?.difficulty === "hard" ? "text-red-600" : "text-amber-600";
-    const diffBg = q?.difficulty === "easy" ? "bg-green-50 border-green-200" : q?.difficulty === "hard" ? "bg-red-50 border-red-200" : "bg-amber-50 border-amber-200";
-
     return (
-      <div className="space-y-4">
-        <div className="flex items-center justify-between p-3 bg-[#0a2540] rounded-xl text-white">
-          <div className="flex items-center gap-3">
-            <div className={`h-2.5 w-2.5 rounded-full ${timeLeft > 10 ? "bg-green-400 animate-pulse" : "bg-red-400 animate-pulse"}`} />
-            <span className="text-sm font-mono font-bold">{formatTime(timeLeft)}</span>
-            <span className="text-[0.667rem] text-gray-400 border-l border-gray-600 pl-3">Total: {formatTime(totalTime)}</span>
-          </div>
-          <div className="flex items-center gap-3">
-            <span className="text-[0.667rem] text-gray-300 hidden sm:inline">{stageInfo.label}</span>
-            <span className={`text-[0.6rem] font-bold uppercase px-2 py-0.5 rounded ${diffBg} ${diffColor}`}>{q?.difficulty}</span>
-            <span className="text-xs text-gray-300">Q{currentQ + 1}/{questions.length}</span>
-          </div>
-        </div>
-
-        <div className="h-1.5 rounded-full bg-gray-800/20">
-          <div className={`h-full rounded-full transition-all duration-1000 ${timeLeft > 10 ? "bg-[#028FA2]" : "bg-red-500"}`} style={{ width: `${(timeLeft / (q?.timeLimit || 30)) * 100}%` }} />
-        </div>
-
-        <div className="p-8 bg-white/[0.02] rounded-lg border border-white/10 text-center min-h-[140px] flex items-center justify-center">
-          <h3 className="text-lg font-semibold text-white leading-relaxed">{q?.question}</h3>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-          {q?.options?.map((opt: any, oi: number) => {
-            const isSelected = selected === oi;
-            const isCorrect = opt.correct;
-            const showResult = selected !== undefined;
-            let cls = "border-white/10 hover:border-[#028FA2]/50 hover:bg-[#028FA2]/10";
-            if (showResult && isSelected && isCorrect) cls = "border-green-400 bg-green-50 shadow-sm";
-            if (showResult && isSelected && !isCorrect) cls = "border-red-400 bg-red-50 shadow-sm";
-            if (showResult && !isSelected && isCorrect) cls = "border-green-300 bg-green-50/50";
-            return (
-              <button key={oi} onClick={() => handleSelect(oi)} disabled={selected !== undefined} className={`flex items-center gap-3 rounded-xl border-2 p-4 text-left transition-all ${cls}`}>
-                <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${showResult && isCorrect ? "bg-green-500 text-white" : showResult && isSelected && !isCorrect ? "bg-red-500 text-white" : "bg-gray-100 text-[#888]"}`}>
-                  {showResult && isCorrect ? "✓" : showResult && isSelected && !isCorrect ? "✗" : String.fromCharCode(65 + oi)}
-                </span>
-                <span className="text-sm text-white">{opt.label}</span>
-              </button>
-            );
-          })}
-        </div>
-
-        {showExplanation && q?.explanation && (
-          <div className="p-3 bg-[#028FA2]/10 border border-[#028FA2]/20 rounded-xl animate-fade-in">
-            <p className="text-xs text-white"><strong>Explanation:</strong> {q.explanation}</p>
-          </div>
-        )}
-
-        {selected !== undefined && (
-          <div className="flex justify-end">
-            <button onClick={handleNext} className="flex items-center gap-1.5 px-5 py-2.5 text-sm font-medium text-white bg-[#028FA2] rounded-xl hover:bg-[#027a8c] transition-colors">
-              {currentQ < questions.length - 1 ? <>Next <ArrowRight className="h-3.5 w-3.5" /></> : <>Finish round <Check className="h-3.5 w-3.5" /></>}
-            </button>
-          </div>
-        )}
-
-        <div className="flex items-center gap-0.5">
-          {questions.map((_: any, i: number) => {
-            const a = answers[i];
-            const done = a !== undefined;
-            const correct = done && a >= 0 && questions[i]?.options[a]?.correct;
-            return <div key={i} className={`h-1.5 flex-1 rounded-full transition-all ${done ? (correct ? "bg-green-500" : a === -1 ? "bg-gray-400" : "bg-red-400") : i === currentQ ? "bg-[#028FA2]" : "bg-gray-200"}`} />;
-          })}
-        </div>
-      </div>
+      <InterviewCall
+        key={attempt}
+        questions={questions}
+        stageLabel={stageInfo.label}
+        company={company}
+        onLeave={() => setMode("lobby")}
+        onFinish={(a, seconds) => { setAnswers(a); setTotalTime(seconds); setMode("review"); }}
+      />
     );
   }
 
-  // ─── LOBBY: pick a stage, optionally add the interviewer, generate or start ───
-  const interviewerField = stage !== "general" && (
-    <div className="text-left">
-      <label htmlFor="interviewer-profile" className="block text-xs font-medium text-white mb-1">Interviewer's LinkedIn profile (optional)</label>
-      <p className="text-[0.667rem] text-[#555] mb-2">Open their public LinkedIn profile, copy the name, headline, About and Experience sections, and paste them here. Questions will be tailored to their background. It stays on your machine and is only sent to your AI provider.</p>
-      <textarea
-        id="interviewer-profile"
-        value={interviewer[stage] || ""}
-        onChange={(e) => setInterviewer((p) => ({ ...p, [stage]: e.target.value }))}
-        rows={4}
-        maxLength={6000}
-        placeholder={"Jane Doe\nDirector of Identity Engineering at Acme\nAbout: ...\nExperience: ..."}
-        className="glass-input w-full rounded-lg px-3 py-2 text-xs"
-      />
-    </div>
-  );
-
+  // ─── LOBBY: pick a stage, generate or start ───
   return (
     <div className="space-y-5">
       <div>
@@ -1618,9 +1669,8 @@ function InterviewTab({ result, loading, onRun }: { result: any; loading: boolea
             <h3 className="text-base font-bold text-white">{stageInfo.label}</h3>
             <p className="text-sm text-[#888] mt-1">{stageInfo.desc} 12 timed multiple-choice questions, easy to hard.</p>
           </div>
-          {interviewerField}
           <div className="text-center">
-            <button onClick={() => onRun(stage, interviewer[stage] || "")} className="px-5 py-2.5 bg-[#028FA2] text-white text-sm font-medium rounded-xl hover:bg-[#027a8c]">
+            <button onClick={() => onRun(stage)} className="px-5 py-2.5 bg-[#028FA2] text-white text-sm font-medium rounded-xl hover:bg-[#027a8c]">
               Generate {stageInfo.label} prep
             </button>
           </div>
@@ -1628,17 +1678,6 @@ function InterviewTab({ result, loading, onRun }: { result: any; loading: boolea
       ) : (
         <>
           {parsed.overview && <p className="text-sm text-[#888]">{parsed.overview}</p>}
-
-          {parsed.insights.length > 0 && (
-            <div className="border border-[#028FA2]/20 bg-[#028FA2]/[0.04] rounded-xl p-4">
-              <h4 className="text-xs font-semibold text-white uppercase mb-2">About your interviewer</h4>
-              <ul className="space-y-1">
-                {parsed.insights.map((tip: string, i: number) => (
-                  <li key={i} className="text-xs text-[#888] flex items-start gap-2"><span className="text-[#028FA2] mt-0.5">•</span> {tip}</li>
-                ))}
-              </ul>
-            </div>
-          )}
 
           <div className="grid grid-cols-3 gap-3">
             {(["easy", "medium", "hard"] as const).map((d) => (
@@ -1670,13 +1709,7 @@ function InterviewTab({ result, loading, onRun }: { result: any; loading: boolea
           )}
 
           {stage !== "general" && (
-            <details className="border border-white/[0.06] rounded-xl p-4">
-              <summary className="text-xs font-medium text-[#028FA2] cursor-pointer">Regenerate this round{stageData?.interviewer ? " (interviewer added)" : ", optionally for a specific interviewer"}</summary>
-              <div className="mt-3 space-y-3">
-                {interviewerField}
-                <button onClick={() => onRun(stage, interviewer[stage] || "")} className="px-4 py-2 text-xs font-medium text-white bg-[#028FA2] rounded-lg hover:bg-[#027a8c]">Regenerate {stageInfo.label}</button>
-              </div>
-            </details>
+            <button onClick={() => onRun(stage)} className="text-xs font-medium text-[#028FA2] hover:underline">Regenerate {stageInfo.label} questions</button>
           )}
         </>
       )}
@@ -1684,7 +1717,273 @@ function InterviewTab({ result, loading, onRun }: { result: any; loading: boolea
   );
 }
 
+// ─── Interview call ──────────────────────────────────────────────────────────
+// One round run like a video call: the interviewer tile asks (and reads aloud) each question, the candidate
+// answers on the side. Fullscreen hides everything else. Keys: 1-4 or A-D answer, Enter next, F fullscreen.
+function InterviewCall({ questions, stageLabel, company, onLeave, onFinish }: {
+  questions: any[]; stageLabel: string; company: string;
+  onLeave: () => void; onFinish: (answers: Record<number, number>, seconds: number) => void;
+}) {
+  const limitOf = (i: number): number => (questions[i]?.timeLimit > 0 ? questions[i].timeLimit : 120);
+  const [currentQ, setCurrentQ] = useState(0);
+  const [answers, setAnswers] = useState<Record<number, number>>({});
+  // Set together with currentQ (never in an effect), so a new question can't inherit the last one's 0 and auto-skip.
+  const [timeLeft, setTimeLeft] = useState<number>(() => limitOf(0));
+  const [totalTime, setTotalTime] = useState(0);
+  const [voiceOn, setVoiceOn] = useState(true);
+  const [speaking, setSpeaking] = useState(false);
+  const [cameraOn, setCameraOn] = useState(false);
+  const [full, setFull] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+
+  const q = questions[currentQ];
+  const selected = answers[currentQ];
+  const answered = selected !== undefined;
+  const isLast = currentQ === questions.length - 1;
+  const fmt = (s: number) => `${Math.floor(s / 60).toString().padStart(2, "0")}:${(s % 60).toString().padStart(2, "0")}`;
+  const initials = stageLabel.split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase();
+  const canSpeak = typeof window !== "undefined" && "speechSynthesis" in window;
+
+  // Question countdown: stops once answered; reaching 0 counts as skipped.
+  useEffect(() => {
+    if (answered) return;
+    if (timeLeft <= 0) { setAnswers((p) => ({ ...p, [currentQ]: -1 })); return; }
+    const t = setTimeout(() => setTimeLeft((s) => s - 1), 1000);
+    return () => clearTimeout(t);
+  }, [timeLeft, answered, currentQ]);
+
+  useEffect(() => {
+    const t = setInterval(() => setTotalTime((s) => s + 1), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  // The interviewer reads each question aloud.
+  const speak = useCallback((text: string) => {
+    if (!canSpeak) return;
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.rate = 1;
+    u.onstart = () => setSpeaking(true);
+    u.onend = u.onerror = () => setSpeaking(false);
+    window.speechSynthesis.speak(u);
+  }, [canSpeak]);
+  useEffect(() => {
+    if (voiceOn && q?.question) speak(q.question);
+    else if (canSpeak) { window.speechSynthesis.cancel(); setSpeaking(false); }
+  }, [currentQ, voiceOn]);
+
+  // Self view. Nothing is recorded or sent anywhere.
+  useEffect(() => {
+    if (!cameraOn) return;
+    let cancelled = false;
+    navigator.mediaDevices?.getUserMedia({ video: true, audio: false })
+      .then((stream) => {
+        if (cancelled) { stream.getTracks().forEach((t) => t.stop()); return; }
+        streamRef.current = stream;
+        if (videoRef.current) videoRef.current.srcObject = stream;
+      })
+      .catch(() => { toast.error("Camera not available. Check your browser permissions."); setCameraOn(false); });
+    return () => {
+      cancelled = true;
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    };
+  }, [cameraOn]);
+
+  // Fullscreen with the browser API when available, otherwise a fixed overlay. Esc leaves either.
+  useEffect(() => {
+    const sync = () => setFull(document.fullscreenElement === rootRef.current);
+    document.addEventListener("fullscreenchange", sync);
+    return () => document.removeEventListener("fullscreenchange", sync);
+  }, []);
+  const toggleFull = () => {
+    const el = rootRef.current;
+    if (document.fullscreenElement) { document.exitFullscreen().catch(() => {}); return; }
+    if (full) { setFull(false); return; }
+    if (el?.requestFullscreen) el.requestFullscreen().catch(() => setFull(true));
+    else setFull(true);
+  };
+
+  const stopEverything = () => {
+    if (canSpeak) window.speechSynthesis.cancel();
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  };
+  useEffect(() => () => { if (canSpeak) window.speechSynthesis.cancel(); }, []);
+
+  const choose = (i: number) => {
+    if (answered || i < 0 || i >= (q?.options?.length || 0)) return;
+    setAnswers((p) => ({ ...p, [currentQ]: i }));
+  };
+  const next = () => {
+    if (!answered) return;
+    if (isLast) { stopEverything(); onFinish(answers, totalTime); return; }
+    setCurrentQ((i) => i + 1);
+    setTimeLeft(limitOf(currentQ + 1));
+  };
+  const leave = () => { stopEverything(); onLeave(); };
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.metaKey || e.ctrlKey || e.altKey) return;
+      const k = e.key.toLowerCase();
+      if (["1", "2", "3", "4"].includes(k)) choose(Number(k) - 1);
+      else if (["a", "b", "c", "d"].includes(k)) choose(k.charCodeAt(0) - 97);
+      else if (k === "enter" || k === "arrowright") next();
+      else if (k === "f") toggleFull();
+      else if (k === "escape" && full && !document.fullscreenElement) setFull(false);
+      else return;
+      e.preventDefault();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
+
+  const C = { stage: "#0b0d12", tile: "#1b1f27", tileBorder: "rgba(255,255,255,0.08)", text: "#f3f4f6", muted: "#9ca3af", accent: "#028FA2" };
+  const lowTime = !answered && timeLeft <= 10;
+  const ctrl = "flex flex-col items-center gap-1 min-w-[3.5rem] px-2 py-1.5 rounded-lg text-[0.667rem] transition-colors hover:bg-white/10";
+
+  return (
+    <div ref={rootRef} className={`${full ? "fixed inset-0 z-[60] rounded-none" : "rounded-xl"} flex flex-col overflow-hidden`} style={{ background: C.stage, color: C.text, minHeight: full ? undefined : 560 }}>
+      {/* Top bar */}
+      <div className="flex items-center justify-between gap-3 px-4 py-2.5" style={{ borderBottom: `1px solid ${C.tileBorder}` }}>
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="h-2 w-2 rounded-full shrink-0 animate-pulse" style={{ background: "#ef4444" }} aria-hidden="true" />
+          <span className="text-sm font-semibold truncate">{stageLabel} interview{company ? ` · ${company}` : ""}</span>
+        </div>
+        <div className="flex items-center gap-3 text-xs shrink-0" style={{ color: C.muted }}>
+          <span className="font-mono">{fmt(totalTime)}</span>
+          <span>Question {currentQ + 1} of {questions.length}</span>
+        </div>
+      </div>
+      <div className="flex gap-0.5 px-4 pt-2" aria-hidden="true">
+        {questions.map((_, i) => {
+          const a = answers[i];
+          const ok = a !== undefined && a >= 0 && questions[i]?.options[a]?.correct;
+          const bg = a === undefined ? (i === currentQ ? C.accent : "rgba(255,255,255,0.12)") : ok ? "#22c55e" : a === -1 ? "#6b7280" : "#ef4444";
+          return <div key={i} className="h-1 flex-1 rounded-full" style={{ background: bg }} />;
+        })}
+      </div>
+
+      {/* Call area */}
+      <div className="flex-1 grid gap-3 p-3 sm:p-4 lg:grid-cols-[1.4fr_1fr] min-h-0">
+        {/* Interviewer tile */}
+        <div className="relative rounded-xl flex flex-col items-center justify-center p-6 min-h-[260px] overflow-hidden" style={{ background: C.tile, border: `2px solid ${speaking ? C.accent : C.tileBorder}` }}>
+          <div className={`flex h-24 w-24 items-center justify-center rounded-full text-2xl font-bold ${speaking ? "animate-pulse" : ""}`} style={{ background: "linear-gradient(135deg,#028FA2,#0a2540)", boxShadow: speaking ? `0 0 0 6px rgba(2,143,162,0.25)` : "none" }}>
+            {initials}
+          </div>
+          <p className="mt-6 text-center text-lg sm:text-xl font-medium leading-relaxed max-w-2xl" aria-live="polite">{q?.question}</p>
+          <span className="absolute left-3 bottom-3 text-xs px-2 py-1 rounded-md" style={{ background: "rgba(0,0,0,0.55)" }}>
+            {stageLabel}{company ? ` · ${company}` : ""}{speaking ? " · speaking" : ""}
+          </span>
+          <span className={`absolute right-3 top-3 font-mono text-sm px-2 py-1 rounded-md ${lowTime ? "animate-pulse" : ""}`} style={{ background: lowTime ? "rgba(239,68,68,0.85)" : "rgba(0,0,0,0.55)" }} aria-label={`Time left ${fmt(timeLeft)}`}>
+            {answered ? "Answered" : fmt(timeLeft)}
+          </span>
+        </div>
+
+        {/* Self view + answers */}
+        <div className="flex flex-col gap-3 min-h-0">
+          <div className="relative rounded-xl overflow-hidden h-28 sm:h-36 flex items-center justify-center shrink-0" style={{ background: C.tile, border: `1px solid ${C.tileBorder}` }}>
+            {cameraOn ? <video ref={videoRef} autoPlay playsInline muted className="h-full w-full object-cover" style={{ transform: "scaleX(-1)" }} />
+              : <div className="flex h-14 w-14 items-center justify-center rounded-full text-sm font-semibold" style={{ background: "#374151" }}>You</div>}
+            <span className="absolute left-2 bottom-2 text-[0.667rem] px-1.5 py-0.5 rounded" style={{ background: "rgba(0,0,0,0.55)" }}>You</span>
+          </div>
+
+          <div className="rounded-xl p-3 flex-1 overflow-y-auto space-y-2" style={{ background: C.tile, border: `1px solid ${C.tileBorder}` }}>
+            <p className="text-[0.667rem] uppercase tracking-wider font-bold" style={{ color: C.muted }}>Your answer</p>
+            {q?.options?.map((opt: any, oi: number) => {
+              const isSel = selected === oi;
+              let border = C.tileBorder, bg = "transparent";
+              if (answered && opt.correct) { border = "#22c55e"; bg = "rgba(34,197,94,0.12)"; }
+              else if (answered && isSel) { border = "#ef4444"; bg = "rgba(239,68,68,0.12)"; }
+              return (
+                <button key={oi} onClick={() => choose(oi)} disabled={answered}
+                  className="w-full flex items-start gap-2.5 rounded-lg p-2.5 text-left text-sm transition-colors enabled:hover:bg-white/5"
+                  style={{ border: `1.5px solid ${border}`, background: bg, color: C.text }}>
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold" style={{ background: answered && opt.correct ? "#22c55e" : answered && isSel ? "#ef4444" : "rgba(255,255,255,0.1)" }}>
+                    {answered && opt.correct ? "✓" : answered && isSel ? "✗" : String.fromCharCode(65 + oi)}
+                  </span>
+                  <span className="leading-snug">{opt.label}</span>
+                </button>
+              );
+            })}
+            {answered && (
+              <div className="pt-1 space-y-2 animate-fade-in">
+                <p className="text-xs" style={{ color: selected === -1 ? "#fbbf24" : q?.options[selected]?.correct ? "#4ade80" : "#f87171" }}>
+                  {selected === -1 ? "Time is up." : q?.options[selected]?.correct ? "Strong answer." : "Not the strongest answer."}
+                </p>
+                {q?.explanation && <p className="text-xs leading-relaxed" style={{ color: C.muted }}>{q.explanation}</p>}
+                <button onClick={next} className="w-full flex items-center justify-center gap-1.5 rounded-lg py-2 text-sm font-medium" style={{ background: C.accent, color: "#fff" }}>
+                  {isLast ? <>Finish round <Check className="h-3.5 w-3.5" /></> : <>Next question <ArrowRight className="h-3.5 w-3.5" /></>}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Controls */}
+      <div className="flex items-center justify-center gap-1 sm:gap-2 px-3 py-2.5" style={{ borderTop: `1px solid ${C.tileBorder}`, background: "#111318" }}>
+        {canSpeak && (
+          <button onClick={() => setVoiceOn((v) => !v)} className={ctrl} aria-pressed={voiceOn} aria-label={voiceOn ? "Mute interviewer voice" : "Unmute interviewer voice"}>
+            {voiceOn ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}<span>{voiceOn ? "Voice on" : "Voice off"}</span>
+          </button>
+        )}
+        {canSpeak && (
+          <button onClick={() => q?.question && speak(q.question)} className={ctrl} aria-label="Repeat the question">
+            <RotateCcw className="h-4 w-4" /><span>Repeat</span>
+          </button>
+        )}
+        <button onClick={() => setCameraOn((v) => !v)} className={ctrl} aria-pressed={cameraOn} aria-label={cameraOn ? "Turn camera off" : "Turn camera on"}>
+          {cameraOn ? <Video className="h-4 w-4" /> : <VideoOff className="h-4 w-4" />}<span>{cameraOn ? "Camera on" : "Camera off"}</span>
+        </button>
+        <button onClick={toggleFull} className={ctrl} aria-pressed={full} aria-label={full ? "Exit full screen" : "Full screen"}>
+          {full ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}<span>{full ? "Exit full" : "Full screen"}</span>
+        </button>
+        <button onClick={leave} className="flex flex-col items-center gap-1 min-w-[3.5rem] px-3 py-1.5 rounded-lg text-[0.667rem] ml-2" style={{ background: "#dc2626", color: "#fff" }} aria-label="Leave the interview">
+          <PhoneOff className="h-4 w-4" /><span>Leave</span>
+        </button>
+      </div>
+      <p className="hidden sm:block text-center text-[0.6rem] pb-2" style={{ color: "#6b7280", background: "#111318" }}>Keys: 1 to 4 to answer, Enter for next, F for full screen. Your camera is only shown to you and never recorded.</p>
+    </div>
+  );
+}
+
 // ─── Shared ──────────────────────────────────────────────────────────────────
+// Shown while lessons generate on the server. Same idea as the full-screen overlay (company facts to read
+// while waiting) but it does not block: the user can study, switch tabs or leave.
+function LessonsGeneratingBanner({ count, facts, company, done, total }: { count: number; facts: string[]; company: string; done?: number; total?: number }) {
+  const [i, setI] = useState(() => Math.floor(Math.random() * Math.max(1, facts.length)));
+  useEffect(() => {
+    if (facts.length < 2) return;
+    const t = setInterval(() => setI((n) => (n + 1) % facts.length), 6000);
+    return () => clearInterval(t);
+  }, [facts.length]);
+  return (
+    <div className="border border-[#028FA2]/25 bg-[#028FA2]/[0.06] rounded-xl p-4 space-y-3" role="status" aria-live="polite">
+      <div className="flex items-start gap-3">
+        <Loader2 className="h-4 w-4 text-[#028FA2] animate-spin mt-0.5 shrink-0" />
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-white">Generating {count} {count === 1 ? "lesson" : "lessons"}{total ? ` (${done} of ${total} ready)` : ""}</p>
+          <p className="text-xs text-[#888] mt-0.5">This keeps going in the background and is saved to this job. You can open ready lessons, use other tabs or leave this page.</p>
+        </div>
+      </div>
+      {total ? (
+        <div className="w-full rounded-full h-1.5" style={{ background: "rgba(2,143,162,0.15)" }}>
+          <div className="h-1.5 rounded-full transition-all" style={{ background: "#028FA2", width: `${total > 0 ? ((done || 0) / total) * 100 : 0}%` }} />
+        </div>
+      ) : null}
+      {facts.length > 0 && (
+        <div className="border-t border-[#028FA2]/15 pt-3">
+          <p className="text-[0.667rem] uppercase tracking-wider font-bold text-[#028FA2] mb-1">Know before you interview: {company}</p>
+          <p key={i} className="text-sm text-white leading-relaxed animate-fade-in">{facts[i % facts.length]}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function LoadingState({ text }: { text: string }) {
   return (
     <div className="flex items-center justify-center py-12">

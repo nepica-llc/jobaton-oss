@@ -419,7 +419,7 @@ export default function Jobs() {
                     {job.description_summary && <p className="text-[0.667rem] text-[#555] mt-1.5 line-clamp-2">{job.description_summary}</p>}
                     <div className="flex items-center gap-1.5 mt-auto pt-3 border-t border-white/[0.06]">
                       <PrepDots prep={prep} />
-                      {prep.ats?.score && (
+                      {prep.ats?.method === 2 && prep.ats?.score && (
                         <span className={`ml-auto text-[0.667rem] font-bold ${prep.ats.score >= 80 ? "text-green-600" : prep.ats.score >= 60 ? "text-amber-600" : "text-red-600"}`}>{prep.ats.score}%</span>
                       )}
                     </div>
@@ -481,7 +481,7 @@ export default function Jobs() {
                             <PrepDots prep={prep} />
                           </td>
                           <td className="px-4 py-3">
-                            {prep.ats?.score ? (
+                            {prep.ats?.method === 2 && prep.ats?.score ? (
                               <span className={`text-xs font-bold ${prep.ats.score >= 80 ? "text-green-600" : prep.ats.score >= 60 ? "text-amber-600" : "text-red-600"}`}>{prep.ats.score}%</span>
                             ) : <span className="text-xs text-gray-300">-</span>}
                           </td>
