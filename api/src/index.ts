@@ -170,9 +170,24 @@ app.post("/api/jobs", (req, res) => {
 
 app.put("/api/jobs/:id", (req, res) => {
   const job = { ...req.body, id: req.params.id };
+  keepServerLessons(job, getById("jobs", req.params.id, pid(res)));
   upsert("jobs", job, pid(res));
   res.json({ ok: true, data: job });
 });
+
+// Lessons are written by the server in the background (see runLessonQueue). A save from a browser
+// that has not picked them up yet would otherwise send them back empty.
+function keepServerLessons(incoming: any, stored: any) {
+  const inMods = incoming?.prep_data?.study_guide?.training;
+  const oldMods = stored?.prep_data?.study_guide?.training;
+  if (!Array.isArray(inMods) || !Array.isArray(oldMods)) return;
+  inMods.forEach((m: any, mi: number) => m?.lessons?.forEach((l: any, li: number) => {
+    const old = oldMods[mi]?.lessons?.[li];
+    if (oldMods[mi]?.title === m.title && old?.title === l?.title && old.sections?.length && !l.sections?.length) {
+      Object.assign(l, { sections: old.sections, keyPoints: old.keyPoints, practicePrompt: old.practicePrompt, quiz: old.quiz });
+    }
+  }));
+}
 
 app.delete("/api/jobs/:id", (req, res) => {
   remove("jobs", req.params.id, pid(res));
@@ -686,29 +701,42 @@ Output as JSON:
 });
 
 // ---------------------------------------------------------------------------
-// AI: Generate Single Lesson (interactive training content)
+// Study guide lessons. Generated on the server so they keep going (and are saved
+// to the job) when the user leaves the page.
 // ---------------------------------------------------------------------------
-app.post("/api/ai/generate-lesson", async (req, res) => {
-  try {
-    const { skill, jobTitle, company, lessonTitle, lessonType, allLessonTitles, sprintDuration = 1, apiKey } = req.body;
-    const ai = getAIClient(apiKey);
-    if (!ai) return res.status(400).json({ ok: false, error: "No API key configured." });
+const LESSON_BRIEFS: Record<string, string> = {
+  "Core Concepts": `Teach the fundamentals: what it is, why it exists, the key terms and how the parts fit together. Definitions belong here and nowhere else in the module.`,
+  "Real-World Patterns": `Do NOT re-define basics. Teach how practitioners actually use this at work: common architectures and workflows, the trade-offs between approaches, failure modes, gotchas, and what a senior person does differently from a junior one. Name real tools and standards where relevant.`,
+  "Scenario Practice": `This is NOT a concept lesson. Do NOT define terms or restate the basics. Every card is part of a concrete workplace scenario written like a short case: a named team or system, a specific symptom, constraint or request, and numbers where they help. Walk through 2 or 3 different scenarios (use the scenario name as the card heading): the situation, what a strong candidate checks first, the decision they make and why, and the mistake a weaker candidate would make.`,
+  "Applied Scenarios": `This is NOT a concept lesson and must not repeat Scenario Practice. Use 2 or 3 harder scenarios set at this company and role: an incident, a design decision with competing requirements, or a stakeholder pushing back. For each, cover the situation, the options, the recommended approach with its trade-off, and how to explain it in an interview answer.`,
+  "Knowledge Check": `A short recap only (4 to 6 cards of the most testable facts and decisions), then the quiz. The quiz carries this lesson.`,
+};
 
-    const systemPrompt = `You are an expert trainer creating bite-sized lesson content for job interview preparation.
-Given a skill name, job title, company and a lesson title, generate the lesson as a sequence of short cards the learner reads (or listens to) one at a time.
+async function generateLessonContent(ai: { client: OpenAI; model: string }, o: {
+  skill: string; moduleDescription?: string; jobTitle: string; company: string; jobDescription?: string;
+  lessonTitle: string; lessonType: string; allLessonTitles: string[]; alreadyCovered: string[];
+}) {
+  const brief = LESSON_BRIEFS[o.lessonTitle] || (o.lessonType === "practice" ? LESSON_BRIEFS["Scenario Practice"] : LESSON_BRIEFS["Core Concepts"]);
+  const systemPrompt = `You are a world-class technical trainer and interview coach. You write study material that gets a candidate ready for a specific job interview: accurate, concrete and specific to the role, never generic filler.
+You are writing ONE lesson of a module. Each lesson in the module has a different job; stay inside this lesson's job and never repeat what other lessons cover.
+
+THIS LESSON'S JOB:
+${brief}
 
 CARDS:
 - 8 to 12 cards in "sections". Each card "body" is ONE or TWO short sentences (at most 40 words). Never a paragraph.
-- Each card teaches one idea. Use concrete, practical wording that sounds natural when read aloud.
-- Group consecutive cards with the same "heading" when they cover the same concept.
-- Add a short "codeSnippet" (at most 12 lines) to at most 2 cards, only where code genuinely helps.
+- Each card makes one point. Use concrete, practical wording that sounds natural when read aloud.
+- Group consecutive cards with the same "heading" when they cover the same concept or scenario.
+- Add a short "codeSnippet" (at most 12 lines) to at most 2 cards, only where code or config genuinely helps.
+- Tie examples to the role and company where it is natural.
 
 QUESTIONS (every question must be gradeable):
 - "quiz" contains ONLY multiple-choice questions with exactly 4 options and exactly one correct answer ("correctIndex", 0 to 3).
 - Never ask open-ended, free-text or "explain in your own words" questions.
+- Make wrong options plausible (common misconceptions), never joke answers. Vary which position holds the correct answer.
 - Lesson type "read": 3 questions checking the cards.
-- Lesson type "practice": 5 scenario questions. Each describes a realistic work or interview situation and asks which action, answer or fix is best.
-- Lesson type "quiz": 8 questions mixing easy, medium and hard.
+- Lesson type "practice": 5 scenario questions. Each one describes a NEW situation (not one from the cards) in 2 or 3 sentences and asks which action, answer or fix is best.
+- Lesson type "quiz": 8 questions mixing easy, medium and hard, at least half of them scenario-based.
 - Each question has a one-sentence "explanation" of why the correct option is right.
 
 Also include 3 to 5 short "keyPoints".
@@ -716,31 +744,117 @@ Also include 3 to 5 short "keyPoints".
 Return ONLY valid JSON:
 {
   "title": "exact lesson title",
-  "sections": [{"heading": "Concept name", "body": "One or two short sentences.", "codeSnippet": ""}],
+  "sections": [{"heading": "Concept or scenario name", "body": "One or two short sentences.", "codeSnippet": ""}],
   "keyPoints": ["Short takeaway"],
   "practicePrompt": "",
   "quiz": [{"question": "...", "options": ["A", "B", "C", "D"], "correctIndex": 0, "explanation": "Why this is right."}]
 }`;
-    const userPrompt = `SKILL: ${skill}\nJOB TITLE: ${jobTitle}\nCOMPANY: ${company || "Company"}\nLESSON TYPE: ${lessonType}\n\nGENERATE THIS LESSON:\n${lessonTitle}\n\nALL LESSONS IN MODULE:\n${(allLessonTitles || []).map((t: string, i: number) => `${i + 1}. ${t}`).join("\n")}`;
+  const userPrompt = [
+    `MODULE (skill): ${o.skill}`,
+    o.moduleDescription ? `MODULE FOCUS: ${o.moduleDescription}` : "",
+    `JOB TITLE: ${o.jobTitle}`,
+    `COMPANY: ${o.company || "the company"}`,
+    `LESSON TYPE: ${o.lessonType}`,
+    `GENERATE THIS LESSON: ${o.lessonTitle}`,
+    `ALL LESSONS IN MODULE:\n${o.allLessonTitles.map((t, i) => `${i + 1}. ${t}`).join("\n")}`,
+    o.alreadyCovered.length ? `ALREADY COVERED IN OTHER LESSONS (do not repeat these points):\n${o.alreadyCovered.slice(0, 40).map((h) => `- ${h}`).join("\n")}` : "",
+    o.jobDescription ? `JOB DESCRIPTION (for context):\n${o.jobDescription.slice(0, 3000)}` : "",
+  ].filter(Boolean).join("\n\n");
 
-    const completion = await ai.client.chat.completions.create({
-      model: ai.model,
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
-      ],
-      temperature: 0.5,
-      max_tokens: 6000,
-      response_format: { type: "json_object" },
-    });
-    const content = noDash(completion.choices[0]?.message?.content || "{}");
-    const parsed = JSON.parse(content);
-    const lesson = parsed.lessons?.[0] || parsed.lesson || parsed;
-    res.json({ ok: true, data: { lesson }, usage: completion.usage });
-  } catch (err: any) {
-    console.error("[ai/generate-lesson]", err.message);
-    res.status(500).json({ ok: false, error: err.message });
+  const completion = await ai.client.chat.completions.create({
+    model: ai.model,
+    messages: [{ role: "system", content: systemPrompt }, { role: "user", content: userPrompt }],
+    temperature: 0.6,
+    max_tokens: 6000,
+    response_format: { type: "json_object" },
+  });
+  const parsed = JSON.parse(noDash(completion.choices[0]?.message?.content || "{}"));
+  const lesson = parsed.lessons?.[0] || parsed.lesson || parsed;
+  const quiz = (Array.isArray(lesson.quiz) ? lesson.quiz : []).filter((q: any) =>
+    q?.question && Array.isArray(q.options) && q.options.length === 4 && Number.isInteger(q.correctIndex) && q.correctIndex >= 0 && q.correctIndex < 4);
+  return {
+    sections: Array.isArray(lesson.sections) ? lesson.sections : [],
+    keyPoints: Array.isArray(lesson.keyPoints) ? lesson.keyPoints : [],
+    practicePrompt: lesson.practicePrompt || "",
+    quiz,
+  };
+}
+
+// In-memory queue per job: "mod:lesson" keys waiting or running, and the last failures.
+// shortcut: lost on server restart (the client just shows those lessons as not generated), fine for a single self-hosted instance.
+// "fresh" holds keys the user asked to regenerate, replacing the existing lesson.
+const lessonQueues = new Map<string, { pending: string[]; fresh: Set<string>; failed: { key: string; error: string }[]; running: boolean }>();
+
+async function runLessonQueue(jobId: string, profileId: string, apiKey?: string) {
+  const q = lessonQueues.get(jobId);
+  if (!q || q.running) return;
+  q.running = true;
+  try {
+    while (q.pending.length > 0) {
+      const key = q.pending[0];
+      const [mi, li] = key.split(":").map(Number);
+      try {
+        const ai = getAIClient(apiKey);
+        if (!ai) throw new Error("No API key configured.");
+        const job: any = getById("jobs", jobId, profileId);
+        const mod = job?.prep_data?.study_guide?.training?.[mi];
+        const lesson = mod?.lessons?.[li];
+        if (!lesson) throw new Error("Lesson not found");
+        const fresh = q.fresh.delete(key);
+        if (fresh || !lesson.sections?.length) {
+          const alreadyCovered: string[] = mod.lessons.flatMap((l: any, i: number) => (i === li ? [] : (l.sections || []).map((s: any) => s.heading))).filter((h: string, i: number, a: string[]) => h && a.indexOf(h) === i);
+          const content = await generateLessonContent(ai, {
+            skill: mod.skill || mod.title, moduleDescription: mod.description, jobTitle: job.title || "", company: job.company || "",
+            jobDescription: job.raw_description || "", lessonTitle: lesson.title, lessonType: lesson.type,
+            allLessonTitles: mod.lessons.map((l: any) => l.title), alreadyCovered,
+          });
+          if (!content.sections.length) throw new Error("The AI returned an empty lesson. Try again.");
+          // Re-read: the user may have saved progress while the AI was working.
+          const latest: any = getById("jobs", jobId, profileId);
+          const target = latest?.prep_data?.study_guide?.training?.[mi]?.lessons?.[li];
+          if (target && (fresh || !target.sections?.length)) {
+            Object.assign(target, content);
+            delete target.quizScore; // the old score was for the old questions
+            upsert("jobs", latest, profileId);
+          }
+        }
+      } catch (err: any) {
+        console.error("[lessons]", jobId, key, err.message);
+        q.failed.push({ key, error: err.message });
+      }
+      q.pending.shift();
+    }
+  } finally {
+    q.running = false;
   }
+}
+
+app.post("/api/jobs/:id/lessons", (req, res) => {
+  const job: any = getById("jobs", req.params.id, pid(res));
+  if (!job) return res.status(404).json({ ok: false, error: "Not found" });
+  if (!getAIClient(req.body?.apiKey)) return res.status(400).json({ ok: false, error: "No API key configured." });
+  const items: unknown = req.body?.items;
+  if (!Array.isArray(items) || items.length === 0 || items.length > 100) return res.status(400).json({ ok: false, error: "items must be a list of {mod, lesson}" });
+  const training = job.prep_data?.study_guide?.training;
+  if (!Array.isArray(training)) return res.status(400).json({ ok: false, error: "Open the study guide once before generating lessons" });
+  const q = lessonQueues.get(job.id) || { pending: [], fresh: new Set<string>(), failed: [], running: false };
+  lessonQueues.set(job.id, q);
+  q.failed = [];
+  for (const it of items as any[]) {
+    const mi = Number(it?.mod), li = Number(it?.lesson);
+    if (!training[mi]?.lessons?.[li]) continue;
+    const key = `${mi}:${li}`;
+    if (it.fresh === true) q.fresh.add(key);
+    if (!q.pending.includes(key)) q.pending.push(key);
+  }
+  runLessonQueue(job.id, pid(res), req.body?.apiKey);
+  res.json({ ok: true, data: { pending: q.pending, failed: q.failed } });
+});
+
+app.get("/api/jobs/:id/lessons", (req, res) => {
+  if (!getById("jobs", req.params.id, pid(res))) return res.status(404).json({ ok: false, error: "Not found" });
+  const q = lessonQueues.get(req.params.id);
+  res.json({ ok: true, data: { pending: q?.pending || [], failed: q?.failed || [] } });
 });
 
 // ---------------------------------------------------------------------------

@@ -11,6 +11,8 @@ export function switchProfile(id: string): void {
   window.location.reload();
 }
 
+export type LessonQueue = { pending: string[]; failed: { key: string; error: string }[] };
+
 async function request<T = any>(path: string, opts: RequestInit = {}): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     ...opts,
@@ -86,8 +88,10 @@ export const api = {
     request("/ai/study-guide", { method: "POST", body: JSON.stringify({ jobTitle, company, jobDescription }) }),
   studyContent: (mode: string, topic: string, moduleTitle: string, jobTitle: string, jobDescription: string) =>
     request("/ai/study-content", { method: "POST", body: JSON.stringify({ mode, topic, moduleTitle, jobTitle, jobDescription }) }),
-  generateLesson: (skill: string, jobTitle: string, company: string, lessonTitle: string, lessonType: string, allLessonTitles: string[]) =>
-    request("/ai/generate-lesson", { method: "POST", body: JSON.stringify({ skill, jobTitle, company, lessonTitle, lessonType, allLessonTitles }) }),
+  // Lessons are generated on the server and saved into the job, so they finish even if the page is closed.
+  queueLessons: (jobId: string, items: { mod: number; lesson: number; fresh?: boolean }[]) =>
+    request<LessonQueue>(`/jobs/${jobId}/lessons`, { method: "POST", body: JSON.stringify({ items }) }),
+  lessonStatus: (jobId: string) => request<LessonQueue>(`/jobs/${jobId}/lessons`),
   interviewPrep: (jobTitle: string, company: string, jobDescription: string, stage: string, interviewer?: string) =>
     request("/ai/interview-prep", { method: "POST", body: JSON.stringify({ jobTitle, company, jobDescription, stage, interviewer }) }),
   mockInterview: (jobTitle: string, jobDescription: string, resumeText: string, messages: any[]) =>
