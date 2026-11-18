@@ -4,6 +4,7 @@ import { ArrowLeft, ArrowRight, ScanSearch, FileText, Mail, MessageSquare, Loade
 import { toast } from "sonner";
 import { api, type LessonQueue } from "@/lib/api";
 import LetterPaper from "@/components/LetterPaper";
+import AtsChecklist from "@/components/AtsChecklist";
 import { downloadPDF as exportPDF, downloadWord, textToBlocks, safeFileName, type DocBlock } from "@/lib/exportDoc";
 
 const MOTIVATIONAL_QUOTES = [
@@ -20,6 +21,15 @@ const MOTIVATIONAL_QUOTES = [
   "Dream big. Start small. Act now. - Robin Sharma",
   "Every expert was once a beginner. - Helen Hayes",
 ];
+
+const MIN_DESCRIPTION = 200;
+
+// Short hash of what a score was computed from, to tell when it is out of date.
+function fingerprint(...parts: string[]) {
+  let h = 5381;
+  for (const ch of parts.join("\u0000")) h = ((h << 5) + h + ch.charCodeAt(0)) >>> 0;
+  return h.toString(36);
+}
 
 function getRandomQuote() {
   return MOTIVATIONAL_QUOTES[Math.floor(Math.random() * MOTIVATIONAL_QUOTES.length)];
@@ -135,8 +145,8 @@ export default function JobPrep() {
 
   // Every AI tool reads the job description; some search results arrive without one.
   const hasDescription = () => {
-    if (jobRef.current?.raw_description?.trim()) return true;
-    toast.error("Add the job description on the Overview tab first");
+    if ((jobRef.current?.raw_description?.trim().length || 0) >= MIN_DESCRIPTION) return true;
+    toast.error(jobRef.current?.raw_description?.trim() ? "The job description is too short. Paste the full posting on the Overview tab." : "Add the job description on the Overview tab first");
     setActiveTab("overview");
     return false;
   };
@@ -157,6 +167,13 @@ export default function JobPrep() {
     await api.updateJob(id!, updated);
   };
 
+  // Scores and study guides are built from the extracted requirements, so extract them first if needed.
+  const ensureAnalyzed = async () => {
+    const cur = jobRef.current;
+    if (!cur?.requirements?.length && cur?.raw_description) await saveDescription(cur.raw_description).catch(() => {});
+    return jobRef.current;
+  };
+
   const startLoading = (tab: string) => { setTabLoading(true); setLoadingTab(tab); setLoadingQuote(getRandomQuote()); };
   const stopLoading = () => { setTabLoading(false); setLoadingTab(null); };
 
@@ -165,9 +182,12 @@ export default function JobPrep() {
     if (!hasDescription()) return;
     startLoading("ats");
     try {
-      const result = await api.atsScore(getResumeText(), job.raw_description || "");
-      setAtsResult(result);
-      await persistPrep({ ats: result });
+      const cur = await ensureAnalyzed();
+      const resumeText = getResumeText();
+      const result = await api.atsScore(resumeText, cur.raw_description || "", [...(cur.requirements || []), ...(cur.nice_to_have || [])]);
+      const scored = { ...result, basis: fingerprint(cur.raw_description || "", resumeText) };
+      setAtsResult(scored);
+      await persistPrep({ ats: scored });
     } catch (err: any) { toast.error(err.message); }
     finally { stopLoading(); }
   };
@@ -217,7 +237,10 @@ export default function JobPrep() {
     if (!hasDescription()) return;
     startLoading("study-guide");
     try {
-      const result = await api.studyGuide(job.title || "", job.company || "", job.raw_description || "");
+      const cur = await ensureAnalyzed();
+      // Requirements the candidate is missing or weak on (from a current ATS check) come first.
+      const gaps = atsResult?.method === 2 ? (atsResult.requirements || []).filter((r: any) => r.status !== "met").map((r: any) => r.requirement) : [];
+      const result = await api.studyGuide(cur.title || "", cur.company || "", cur.raw_description || "", cur.requirements || [], cur.nice_to_have || [], gaps);
       setStudyGuideResult(result);
       await persistPrep({ study_guide: result });
     } catch (err: any) { toast.error(err.message); }
@@ -284,7 +307,7 @@ export default function JobPrep() {
       {/* Tab content */}
       <div className="bg-[#1a1a1a] rounded-xl border border-white/10 p-5 min-h-[300px]">
         {activeTab === "overview" && <OverviewTab job={job} onSaveDescription={saveDescription} />}
-        {activeTab === "ats" && <ATSTab result={atsResult} loading={tabLoading} onRun={runATS} />}
+        {activeTab === "ats" && <ATSTab result={atsResult} loading={tabLoading} onRun={runATS} currentBasis={fingerprint(job.raw_description || "", getResumeText())} />}
         {activeTab === "tailor" && (
           <TailorTab
             fileBase={safeFileName(job.company, job.title)}
@@ -340,6 +363,12 @@ function OverviewTab({ job, onSaveDescription }: { job: any; onSaveDescription: 
   const [text, setText] = useState("");
   const [saving, setSaving] = useState(false);
   const analyzed = job.description_summary || job.requirements?.length > 0;
+  const autoTried = useRef(false);
+  useEffect(() => {
+    if (analyzed || autoTried.current || !job.raw_description?.trim()) return;
+    autoTried.current = true;
+    save(job.raw_description);
+  }, [analyzed, job.raw_description]);
   const save = async (value: string) => {
     if (!value.trim()) return;
     setSaving(true);
@@ -416,7 +445,7 @@ function OverviewTab({ job, onSaveDescription }: { job: any; onSaveDescription: 
 }
 
 // ─── ATS Tab ─────────────────────────────────────────────────────────────────
-function ATSTab({ result, loading, onRun }: { result: any; loading: boolean; onRun: () => void }) {
+function ATSTab({ result, loading, onRun, currentBasis }: { result: any; loading: boolean; onRun: () => void; currentBasis: string }) {
   if (!result && !loading) {
     return (
       <div className="text-center py-8">
@@ -428,6 +457,8 @@ function ATSTab({ result, loading, onRun }: { result: any; loading: boolean; onR
   }
   if (loading) return <LoadingState text="Analyzing..." />;
 
+  const legacy = result?.method !== 2;
+  const stale = !legacy && result?.basis && result.basis !== currentBasis;
   const score = result?.score || 0;
   const ringColor = score >= 80 ? "#22c55e" : score >= 60 ? "#eab308" : "#ef4444";
   const verdictColor = score >= 80 ? "text-green-400 bg-green-500/10 border-green-500/20" : score >= 60 ? "text-amber-400 bg-amber-500/10 border-amber-500/20" : "text-red-400 bg-red-500/10 border-red-500/20";
@@ -447,7 +478,7 @@ function ATSTab({ result, loading, onRun }: { result: any; loading: boolean; onR
         <div className="flex items-center gap-4">
           <div className="relative w-20 h-20">
             <svg className="w-20 h-20 -rotate-90" viewBox="0 0 80 80">
-              <circle cx="40" cy="40" r="34" fill="none" stroke="#e5e7eb" strokeWidth="6" />
+              <circle cx="40" cy="40" r="34" fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="6" />
               <circle cx="40" cy="40" r="34" fill="none" stroke={ringColor} strokeWidth="6" strokeDasharray={`${(score / 100) * 213.6} 213.6`} strokeLinecap="round" />
             </svg>
             <span className="absolute inset-0 flex items-center justify-center text-2xl font-bold text-white">{score}</span>
@@ -459,6 +490,19 @@ function ATSTab({ result, loading, onRun }: { result: any; loading: boolean; onR
         </div>
         <button onClick={onRun} className="text-xs text-[#028FA2] hover:underline shrink-0">Re-run</button>
       </div>
+
+      {(legacy || stale) && (
+        <div className="flex items-center justify-between gap-3 p-3 rounded-lg border border-amber-500/30 bg-amber-500/[0.08]">
+          <p className="text-xs text-amber-200">
+            {legacy
+              ? "This score was made with the old method, which did not check the job description properly. Do not rely on it. Run the scan again."
+              : "The job description or your resume has changed since this scan. Run it again for a current score."}
+          </p>
+          <button onClick={onRun} className="glass-btn-primary px-3 py-1.5 text-xs font-medium rounded-md shrink-0">Scan again</button>
+        </div>
+      )}
+
+      <AtsChecklist result={result} />
 
       {/* Section Breakdown */}
       <div>
@@ -784,6 +828,7 @@ interface TrainingModule {
   skill: string;
   title: string;
   description: string;
+  requirements?: string[];
   lessons: Lesson[];
 }
 interface Lesson {
@@ -818,6 +863,7 @@ function buildModulesFromGuide(data: any): TrainingModule[] {
     skill: mod.title,
     title: mod.title,
     description: mod.description || "",
+    requirements: Array.isArray(mod.requirements) ? mod.requirements : [],
     lessons: LESSON_TEMPLATES.map((t) => ({
       ...t,
       description: `${t.title} for ${mod.title}`,
@@ -1026,6 +1072,9 @@ function StudyGuideTab({ jobId, company, facts, result, loading, onRun, onSave, 
             <p className="text-[0.667rem] uppercase tracking-wider text-[#028FA2] font-bold">Module {openModuleIdx + 1}</p>
             <h3 className="text-lg font-bold text-white">{mod.title}</h3>
             <p className="text-xs text-gray-500">{mod.description}</p>
+            {mod.requirements && mod.requirements.length > 0 && (
+              <p className="text-[0.7rem] text-[#888] mt-1"><span className="text-[#2dd4bf] font-semibold">Prepares you for:</span> {mod.requirements.join("; ")}</p>
+            )}
           </div>
         </div>
         <div className="w-full bg-gray-100 rounded-full h-2">
@@ -1126,6 +1175,13 @@ function StudyGuideTab({ jobId, company, facts, result, loading, onRun, onSave, 
         );
       })()}
 
+      {result?.coverage?.total > 0 && (
+        <div className={`p-3 rounded-lg border text-xs ${result.coverage.uncovered.length ? "border-amber-500/30 bg-amber-500/[0.08] text-amber-200" : "border-green-500/25 bg-green-500/[0.06] text-green-300"}`}>
+          <p className="font-semibold">Covers {result.coverage.covered.length} of {result.coverage.total} job requirements</p>
+          {result.coverage.uncovered.length > 0 && <p className="mt-1">Not covered yet: {result.coverage.uncovered.join("; ")}. Re-generate the guide to try again.</p>}
+        </div>
+      )}
+
       {anyGenerating ? (
         <LessonsGeneratingBanner count={generatingCount} facts={facts} company={company} done={readyLessons} total={totalLessons} />
       ) : readyLessons < totalLessons && modules.length > 0 && (
@@ -1166,6 +1222,12 @@ function StudyGuideTab({ jobId, company, facts, result, loading, onRun, onSave, 
                 <div className="flex-1 min-w-0">
                   <h4 className={`text-sm font-semibold ${isModDone ? "line-through" : ""}`}>{mod.title}</h4>
                   <p className="text-[0.667rem] text-gray-500 mt-0.5 line-clamp-2">{mod.description}</p>
+                  {mod.requirements && mod.requirements.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-1.5">
+                      {mod.requirements.slice(0, 2).map((r) => <span key={r} className="text-[0.6rem] px-1.5 py-0.5 rounded bg-[#028FA2]/10 text-[#2dd4bf] truncate max-w-[12rem]" title={r}>{r}</span>)}
+                      {mod.requirements.length > 2 && <span className="text-[0.6rem] px-1.5 py-0.5 rounded bg-white/[0.06] text-[#888]" title={mod.requirements.slice(2).join("; ")}>+{mod.requirements.length - 2}</span>}
+                    </div>
+                  )}
                   <p className="text-[0.667rem] text-gray-400 mt-1.5">{modCompleted}/{modTotal} lessons</p>
                 </div>
               </div>

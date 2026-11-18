@@ -78,14 +78,14 @@ export const api = {
     request("/ai/parse-job", { method: "POST", body: JSON.stringify({ rawDescription }) }),
   tailorResume: (resumeText: string, jobDescription: string) =>
     request("/ai/tailor-resume", { method: "POST", body: JSON.stringify({ resumeText, jobDescription }) }),
-  atsScore: (resumeText: string, jobDescription: string) =>
-    request("/ai/ats-score", { method: "POST", body: JSON.stringify({ resumeText, jobDescription }) }),
+  atsScore: (resumeText: string, jobDescription: string, requirements?: string[]) =>
+    request("/ai/ats-score", { method: "POST", body: JSON.stringify({ resumeText, jobDescription, requirements }) }),
   coverLetter: (resumeText: string, jobDescription: string, tone?: string) =>
     request("/ai/cover-letter", { method: "POST", body: JSON.stringify({ resumeText, jobDescription, tone }) }),
   companyFacts: (company: string, jobTitle: string, jobDescription: string) =>
     request<{ facts: string[] }>("/ai/company-facts", { method: "POST", body: JSON.stringify({ company, jobTitle, jobDescription }) }),
-  studyGuide: (jobTitle: string, company: string, jobDescription: string) =>
-    request("/ai/study-guide", { method: "POST", body: JSON.stringify({ jobTitle, company, jobDescription }) }),
+  studyGuide: (jobTitle: string, company: string, jobDescription: string, requirements?: string[], niceToHave?: string[], gaps?: string[]) =>
+    request("/ai/study-guide", { method: "POST", body: JSON.stringify({ jobTitle, company, jobDescription, requirements, niceToHave, gaps }) }),
   studyContent: (mode: string, topic: string, moduleTitle: string, jobTitle: string, jobDescription: string) =>
     request("/ai/study-content", { method: "POST", body: JSON.stringify({ mode, topic, moduleTitle, jobTitle, jobDescription }) }),
   // Lessons are generated on the server and saved into the job, so they finish even if the page is closed.

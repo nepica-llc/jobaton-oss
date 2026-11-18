@@ -4,6 +4,7 @@ import path from "node:path";
 import { readCollection, upsert, remove, getSettings, saveSettings, getById, getProfile, saveProfile, getJobsByStatus, listProfiles, profileExists, createProfile, renameProfile, resetProfile, deleteProfile } from "./storage.js";
 import OpenAI from "openai";
 import { guardTailoredResume } from "./resumeGuard.js";
+import { ATS_METHOD, MIN_JOB_DESCRIPTION, MIN_RESUME, checkRequirements, keywordCoverage, computeAtsScore, studyCoverage } from "./scoring.js";
 import { v4 as uuid } from "uuid";
 
 const app = express();
@@ -488,55 +489,88 @@ app.post("/api/ai/cover-letter", async (req, res) => {
 // ---------------------------------------------------------------------------
 app.post("/api/ai/ats-score", async (req, res) => {
   try {
-    const { resumeText, jobDescription, apiKey } = req.body;
+    const { resumeText, jobDescription, requirements, apiKey } = req.body;
+    // A score is only meaningful against a real job description and a real resume.
+    const jd = typeof jobDescription === "string" ? jobDescription.trim() : "";
+    const resume = typeof resumeText === "string" ? resumeText.trim() : "";
+    if (jd.length < MIN_JOB_DESCRIPTION) {
+      return res.status(400).json({ ok: false, error: "The job description is missing or too short to score against. Add the full job description first." });
+    }
+    if (resume.length < MIN_RESUME) {
+      return res.status(400).json({ ok: false, error: "The resume has too little text to score. Upload or fill in your full resume first." });
+    }
     const ai = getAIClient(apiKey);
     if (!ai) {
       return res.status(400).json({ ok: false, error: "No API key configured." });
     }
-    const systemPrompt = `You are an ATS (Applicant Tracking System) expert and hiring manager. Perform a thorough analysis of the resume against the job description.
+    const known = (Array.isArray(requirements) ? requirements : []).filter((r: unknown) => typeof r === "string" && r.trim()).slice(0, 30);
+    const systemPrompt = `You are a strict, fair ATS and hiring manager. You check a resume against a job description, one requirement at a time.
+You do NOT give an overall score; it is calculated from your requirement checks. Be accurate: never give credit the resume text does not support.
 
-Output as JSON with this EXACT structure:
+Output JSON with this EXACT structure:
 {
-  "score": number (0-100),
-  "verdict": "Strong Match" | "Good Match" | "Needs Work" | "Weak Match",
-  "summary": "2-3 sentence assessment explaining WHY this score was given and the candidate's overall fit",
-  "keywordMatches": ["keyword1", "keyword2"],
-  "missingKeywords": ["keyword1", "keyword2"],
-  "skillGaps": [
-    { "skill": "skill name", "importance": "critical" | "important" | "nice-to-have", "suggestion": "how to address this gap" }
+  "requirements": [
+    { "requirement": "one specific requirement from the job description", "priority": "must" | "nice", "status": "met" | "partial" | "missing", "evidence": "exact words copied from the resume that prove it, or empty" }
   ],
+  "keywords": ["hard skill, tool, technology, certification or domain term exactly as written in the job description"],
+  "summary": "2-3 sentences on the candidate's fit, naming the biggest strengths and gaps",
+  "skillGaps": [{ "skill": "skill name", "importance": "critical" | "important" | "nice-to-have", "suggestion": "how to address this gap honestly" }],
   "sections": {
-    "summary": { "score": number, "feedback": "detailed feedback on the resume summary/objective section", "improvements": ["specific improvement 1", "specific improvement 2"] },
-    "experience": { "score": number, "feedback": "detailed feedback on work experience relevance and impact", "improvements": ["specific improvement 1", "specific improvement 2"] },
-    "skills": { "score": number, "feedback": "detailed feedback on skills match and presentation", "improvements": ["specific improvement 1", "specific improvement 2"] },
-    "education": { "score": number, "feedback": "detailed feedback on education and certifications", "improvements": ["specific improvement 1"] },
-    "formatting": { "score": number, "feedback": "ATS parsing compatibility assessment", "improvements": ["specific improvement 1"] }
+    "summary": { "score": number, "feedback": "...", "improvements": ["..."] },
+    "experience": { "score": number, "feedback": "...", "improvements": ["..."] },
+    "skills": { "score": number, "feedback": "...", "improvements": ["..."] },
+    "education": { "score": number, "feedback": "...", "improvements": ["..."] },
+    "formatting": { "score": number, "feedback": "ATS parsing compatibility", "improvements": ["..."] }
   },
-  "suggestions": ["actionable suggestion 1", "actionable suggestion 2", "actionable suggestion 3", "actionable suggestion 4", "actionable suggestion 5"],
-  "strengths": ["strength 1", "strength 2", "strength 3"],
-  "redFlags": ["potential concern 1"]
+  "suggestions": ["specific, actionable suggestion"],
+  "strengths": ["strength"],
+  "redFlags": ["potential concern"]
 }
 
-RULES:
-- Be thorough and specific in feedback - generic advice is useless
-- Each section score should be 0-100
-- skillGaps must list skills from the JD that are missing or underrepresented in the resume
-- suggestions should be specific and actionable (e.g. "Add 'Kubernetes' to your skills section and mention container orchestration in your AWS experience bullet")
-- strengths should highlight what the resume does well
-- redFlags should note potential concerns a recruiter might have
-- Provide at least 3 skillGaps, 5 suggestions, and 3 strengths`;
+REQUIREMENT RULES:
+- List 8 to 15 requirements. Each is ONE atomic, checkable requirement (split "Okta and Azure AD" into two). Cover required skills, experience level, tools, certifications, education and key responsibilities.
+- If KNOWN REQUIREMENTS are given, include every one of them (reworded only if needed to be atomic).
+- priority "must" for required or core items, "nice" for preferred, "plus" or "bonus" items.
+- status "met" only when the resume clearly shows it; "partial" for related or weaker evidence (for example fewer years, a similar tool); otherwise "missing".
+- "evidence" MUST be copied word for word from the RESUME (5 to 25 words, no ellipses, no paraphrase). Use "" when status is "missing". Evidence that is not in the resume is ignored and the status is lowered.
+- Never treat the job description itself as evidence.
+
+KEYWORD RULES:
+- 15 to 30 keywords, copied exactly as they appear in the job description (same spelling), most important first. No generic words like "team" or "communication".
+
+FEEDBACK RULES:
+- Specific, never generic. Suggestions must be honest: never suggest claiming skills or credentials the candidate does not have.
+- At least 3 skillGaps (if any exist), 5 suggestions and 3 strengths.`;
+    const userPrompt = `RESUME:\n${resume}\n\nJOB DESCRIPTION:\n${jd}${known.length ? `\n\nKNOWN REQUIREMENTS (extracted from the job description):\n${known.map((r: string) => `- ${r}`).join("\n")}` : ""}`;
     const completion = await ai.client.chat.completions.create({
       model: ai.model,
       messages: [
         { role: "system", content: systemPrompt },
-        { role: "user", content: `RESUME:\n${resumeText}\n\nJOB DESCRIPTION:\n${jobDescription}` },
+        { role: "user", content: userPrompt },
       ],
-      temperature: 0.3,
-      max_tokens: 4096,
+      temperature: 0,
+      max_tokens: 5000,
       response_format: { type: "json_object" },
     });
-    const content = noDash(completion.choices[0]?.message?.content || "{}");
-    res.json({ ok: true, data: JSON.parse(content), usage: completion.usage });
+    const parsed = JSON.parse(noDash(completion.choices[0]?.message?.content || "{}").replace(/```json?\n?/g, "").replace(/```/g, "").trim());
+    const checked = checkRequirements(parsed.requirements, resume);
+    if (checked.length === 0) throw new Error("The AI did not return any requirements to check. Try again.");
+    const kw = keywordCoverage(parsed.keywords, jd, resume);
+    const result = computeAtsScore(checked, kw);
+    res.json({
+      ok: true,
+      data: {
+        ...parsed,
+        ...result,
+        requirements: checked,
+        keywords: undefined,
+        keywordMatches: kw.matched,
+        missingKeywords: kw.missing,
+        method: ATS_METHOD,
+        scoredAt: new Date().toISOString(),
+      },
+      usage: completion.usage,
+    });
   } catch (err: any) {
     console.error("[ai/ats-score]", err.message);
     res.status(500).json({ ok: false, error: err.message });
@@ -584,21 +618,30 @@ Return JSON: {"facts": ["...", "..."]}`,
 // ---------------------------------------------------------------------------
 app.post("/api/ai/study-guide", async (req, res) => {
   try {
-    const { jobTitle, company, jobDescription, apiKey } = req.body;
+    const { jobTitle, company, jobDescription, requirements, niceToHave, gaps, apiKey } = req.body;
     const ai = getAIClient(apiKey);
     if (!ai) {
       return res.status(400).json({ ok: false, error: "No API key configured." });
     }
-    const systemPrompt = `You are a technical learning coach. Based on the job description, create a study guide with EXACTLY 10 modules (no more, no less) that a candidate should complete to be fully prepared for this role.
+    if (typeof jobDescription !== "string" || jobDescription.trim().length < MIN_JOB_DESCRIPTION) {
+      return res.status(400).json({ ok: false, error: "Add the full job description first. The study guide is built from its requirements." });
+    }
+    const list = (v: unknown) => (Array.isArray(v) ? v : []).filter((r): r is string => typeof r === "string" && !!r.trim()).map((r) => r.trim()).slice(0, 30);
+    const must = list(requirements), nice = list(niceToHave), gapList = list(gaps);
+    const all = [...must, ...nice];
 
-IMPORTANT RULES:
-- You MUST produce exactly 10 modules in the "modules" array.
-- Every module MUST have a title, description, duration, at least 2 topics, and at least 3 learning activities.
-- Do NOT include any external URLs or links. All learning content will be generated interactively by AI.
-- Activities should describe what the learner will do (e.g. "Learn about X", "Practice Y", "Quiz on Z").
-- Do NOT leave any field empty or null.
+    const systemPrompt = `You are a technical learning coach. Build a study guide that prepares a candidate for THIS job's requirements, and nothing generic.
 
-Output as JSON:
+RULES:
+- Every module exists to prepare for specific requirements from the REQUIREMENTS list. Put the exact requirement strings it covers in "requirements" (copied word for word from the list).
+- Every MUST-HAVE requirement must be covered by at least one module. Cover nice-to-haves when they fit.
+- Group closely related requirements into one module; do not pad with filler modules. Use 6 to 10 modules.
+- Order: requirements the candidate is MISSING or WEAK on first, then the rest, building from fundamentals to advanced.
+- Titles name the skill concretely (e.g. "SCIM provisioning with Okta and Workday"), not vague themes.
+- Each module: description saying which requirement it prepares for and what the candidate must be able to do in the interview, 2 to 5 specific topics, at least 3 activities, and success criteria tied to the requirement.
+- No external URLs. All learning content is generated interactively later.
+
+Output JSON:
 {
   "title": "Study Guide for [role]",
   "estimated_total_hours": number,
@@ -606,31 +649,44 @@ Output as JSON:
     {
       "number": 1,
       "title": "Module title",
-      "description": "What this module covers and why it matters for the role",
-      "duration": "estimated hours (e.g. 3-4 hours)",
-      "topics": ["topic1", "topic2"],
-      "activities": [
-        {"type": "learn|practice|quiz|build|explore", "title": "Activity title", "description": "What the learner will do"}
-      ],
-      "success_criteria": "How to know you've mastered this module"
+      "requirements": ["exact requirement text from the list"],
+      "description": "...",
+      "duration": "e.g. 3-4 hours",
+      "topics": ["topic"],
+      "activities": [{"type": "learn|practice|quiz|build|explore", "title": "...", "description": "..."}],
+      "success_criteria": "..."
     }
   ]
-}
+}`;
+    const reqBlock = all.length
+      ? `REQUIREMENTS:\nMUST-HAVE:\n${must.map((r) => `- ${r}`).join("\n") || "- (none listed)"}\nNICE-TO-HAVE:\n${nice.map((r) => `- ${r}`).join("\n") || "- (none listed)"}${gapList.length ? `\n\nCANDIDATE IS MISSING OR WEAK ON (from their ATS check):\n${gapList.map((r) => `- ${r}`).join("\n")}` : ""}`
+      : `REQUIREMENTS: none were extracted. Derive them from the job description and list each module's requirement in its own words.`;
+    const ask = async (system: string, user: string) => {
+      const c = await ai.client.chat.completions.create({
+        model: ai.model,
+        messages: [{ role: "system", content: system }, { role: "user", content: user }],
+        temperature: 0.4,
+        max_tokens: 5000,
+        response_format: { type: "json_object" },
+      });
+      return JSON.parse(noDash(c.choices[0]?.message?.content || "{}"));
+    };
+    const base = `JOB TITLE: ${jobTitle}\nCOMPANY: ${company || "Not specified"}\n\n${reqBlock}\n\nJOB DESCRIPTION:\n${jobDescription.slice(0, 8000)}`;
+    const guide = await ask(systemPrompt, base);
+    if (!Array.isArray(guide.modules) || guide.modules.length === 0) throw new Error("The AI returned an empty study guide. Try again.");
 
-Make modules progressively build on each other. Include a mix of conceptual learning, hands-on practice, and quizzes.`;
+    if (all.length === 0) return res.json({ ok: true, data: { ...guide, coverage: null } });
 
-    const completion = await ai.client.chat.completions.create({
-      model: ai.model,
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: `JOB TITLE: ${jobTitle}\nCOMPANY: ${company || "Not specified"}\n\nJOB DESCRIPTION:\n${jobDescription}` },
-      ],
-      temperature: 0.5,
-      max_tokens: 4096,
-      response_format: { type: "json_object" },
-    });
-    const content = noDash(completion.choices[0]?.message?.content || "{}");
-    res.json({ ok: true, data: JSON.parse(content), usage: completion.usage });
+    let cov = studyCoverage(guide.modules, all);
+    // One repair pass: add modules for must-haves nothing covers yet.
+    const uncoveredMust = cov.uncovered.filter((r) => must.includes(r));
+    if (uncoveredMust.length > 0 && guide.modules.length < 12) {
+      const extra = await ask(systemPrompt + `\n\nYou are ADDING modules to an existing guide. Return {"modules": [...]} with 1 to ${Math.min(4, 12 - guide.modules.length)} new modules that cover ONLY the uncovered requirements.`,
+        `${base}\n\nEXISTING MODULES: ${guide.modules.map((m: any) => m.title).join("; ")}\n\nUNCOVERED MUST-HAVE REQUIREMENTS:\n${uncoveredMust.map((r) => `- ${r}`).join("\n")}`).catch(() => null);
+      if (Array.isArray(extra?.modules)) cov = studyCoverage([...guide.modules, ...extra.modules.slice(0, 12 - guide.modules.length)], all);
+    }
+    const modules = cov.modules.map((m: any, i: number) => ({ ...m, number: i + 1 }));
+    res.json({ ok: true, data: { ...guide, modules, coverage: { total: all.length, covered: cov.covered, uncovered: cov.uncovered } } });
   } catch (err: any) {
     console.error("[ai/study-guide]", err.message);
     res.status(500).json({ ok: false, error: err.message });
@@ -713,7 +769,7 @@ const LESSON_BRIEFS: Record<string, string> = {
 };
 
 async function generateLessonContent(ai: { client: OpenAI; model: string }, o: {
-  skill: string; moduleDescription?: string; jobTitle: string; company: string; jobDescription?: string;
+  skill: string; moduleDescription?: string; requirements?: string[]; jobTitle: string; company: string; jobDescription?: string;
   lessonTitle: string; lessonType: string; allLessonTitles: string[]; alreadyCovered: string[];
 }) {
   const brief = LESSON_BRIEFS[o.lessonTitle] || (o.lessonType === "practice" ? LESSON_BRIEFS["Scenario Practice"] : LESSON_BRIEFS["Core Concepts"]);
@@ -752,6 +808,7 @@ Return ONLY valid JSON:
   const userPrompt = [
     `MODULE (skill): ${o.skill}`,
     o.moduleDescription ? `MODULE FOCUS: ${o.moduleDescription}` : "",
+    o.requirements?.length ? `JOB REQUIREMENTS THIS MODULE PREPARES FOR (every lesson must serve these):\n${o.requirements.map((r) => `- ${r}`).join("\n")}` : "",
     `JOB TITLE: ${o.jobTitle}`,
     `COMPANY: ${o.company || "the company"}`,
     `LESSON TYPE: ${o.lessonType}`,
@@ -804,7 +861,7 @@ async function runLessonQueue(jobId: string, profileId: string, apiKey?: string)
         if (fresh || !lesson.sections?.length) {
           const alreadyCovered: string[] = mod.lessons.flatMap((l: any, i: number) => (i === li ? [] : (l.sections || []).map((s: any) => s.heading))).filter((h: string, i: number, a: string[]) => h && a.indexOf(h) === i);
           const content = await generateLessonContent(ai, {
-            skill: mod.skill || mod.title, moduleDescription: mod.description, jobTitle: job.title || "", company: job.company || "",
+            skill: mod.skill || mod.title, moduleDescription: mod.description, requirements: Array.isArray(mod.requirements) ? mod.requirements : [], jobTitle: job.title || "", company: job.company || "",
             jobDescription: job.raw_description || "", lessonTitle: lesson.title, lessonType: lesson.type,
             allLessonTitles: mod.lessons.map((l: any) => l.title), alreadyCovered,
           });
