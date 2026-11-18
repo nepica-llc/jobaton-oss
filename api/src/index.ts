@@ -64,7 +64,7 @@ app.delete("/api/profiles/:id", (req, res) => {
 // Health
 // ---------------------------------------------------------------------------
 app.get("/api/health", (_req, res) => {
-  res.json({ ok: true, version: "1.0.0" });
+  res.json({ ok: true, version: "1.0.0", ai: !!getAIClient() });
 });
 
 // ---------------------------------------------------------------------------
@@ -889,6 +889,7 @@ async function runLessonQueue(jobId: string, profileId: string, apiKey?: string)
 app.post("/api/jobs/:id/lessons", (req, res) => {
   const job: any = getById("jobs", req.params.id, pid(res));
   if (!job) return res.status(404).json({ ok: false, error: "Not found" });
+  if (job.demo) return res.status(400).json({ ok: false, error: "This is the sample job from the tour. Add a real job to generate lessons." });
   if (!getAIClient(req.body?.apiKey)) return res.status(400).json({ ok: false, error: "No API key configured." });
   const items: unknown = req.body?.items;
   if (!Array.isArray(items) || items.length === 0 || items.length > 100) return res.status(400).json({ ok: false, error: "items must be a list of {mod, lesson}" });

@@ -2,50 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { Upload, Plus, Trash2, FileText, Download, Sparkles, Loader2, Check, X, LayoutGrid, List, Linkedin } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
-
-interface ResumeData {
-  id?: string;
-  name: string;
-  fullName: string;
-  email: string;
-  phone: string;
-  location: string;
-  linkedin?: string;
-  github?: string;
-  portfolio?: string;
-  summary: string;
-  experience: { title: string; company: string; location: string; startDate: string; endDate: string; bullets: string[] }[];
-  education: { school: string; degree: string; field?: string; year: string; gpa?: string; honors?: string }[];
-  skills: string[];
-  certifications: { name: string; issuer: string; year: string }[];
-  projects: { name: string; description: string; technologies: string }[];
-  languages: { language: string; proficiency: string }[];
-  volunteer: { role: string; organization: string; description: string }[];
-  publications: string[];
-  awards: string[];
-  rawText?: string;
-}
-
-const emptyResume: ResumeData = {
-  name: "My Resume",
-  fullName: "",
-  email: "",
-  phone: "",
-  location: "",
-  linkedin: "",
-  github: "",
-  portfolio: "",
-  summary: "",
-  experience: [],
-  education: [],
-  skills: [],
-  certifications: [],
-  projects: [],
-  languages: [],
-  volunteer: [],
-  publications: [],
-  awards: [],
-};
+import { type ResumeData, emptyResume, extractTextFromPdf, parseResumeText, generateResumeName } from "@/lib/resumeImport";
 
 const RESUME_TIPS = [
   "Start each bullet with a strong verb and end it with a measurable result.",
@@ -62,20 +19,6 @@ const RESUME_TIPS = [
 
 function getRandomTip() {
   return RESUME_TIPS[Math.floor(Math.random() * RESUME_TIPS.length)];
-}
-
-function generateResumeName(parsed: ResumeData, existingCount: number): string {
-  const parts = (parsed.fullName || "").trim().split(/\s+/);
-  const firstName = parts[0] || "Resume";
-  const lastName = parts.length > 1 ? parts[parts.length - 1] : "";
-  // Derive domain abbreviation from top skill or job title
-  const domain = (parsed.skills?.[0] || parsed.experience?.[0]?.title || "General")
-    .replace(/[^a-zA-Z\s]/g, "")
-    .split(/\s+/)
-    .map((w) => w.charAt(0).toUpperCase())
-    .join("")
-    .slice(0, 4);
-  return `${existingCount + 1}_${firstName}${lastName ? "_" + lastName : ""}_${domain}`;
 }
 
 export default function Resume() {
@@ -97,63 +40,6 @@ export default function Resume() {
     }).catch(() => {});
   }, []);
 
-  const extractTextFromPdf = async (file: File): Promise<string> => {
-    const pdfjsLib = await import("pdfjs-dist");
-    pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
-    const arrayBuffer = await file.arrayBuffer();
-    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-    const pages: string[] = [];
-    for (let i = 1; i <= pdf.numPages; i++) {
-      const page = await pdf.getPage(i);
-      const content = await page.getTextContent();
-      pages.push((content.items as any[]).map((item) => item.str).join(" "));
-    }
-    return pages.join("\n\n");
-  };
-
-  const parseWithAI = async (text: string): Promise<ResumeData> => {
-    const res = await api.chat([
-      {
-        role: "system",
-        content: `Parse this resume text into structured JSON. Extract EVERYTHING the person has listed. Output ONLY valid JSON with this shape:
-{
-  "fullName": "", "email": "", "phone": "", "location": "",
-  "linkedin": "", "github": "", "portfolio": "",
-  "summary": "",
-  "experience": [{"title":"","company":"","location":"","startDate":"","endDate":"","bullets":[""]}],
-  "education": [{"school":"","degree":"","field":"field of study","year":"graduation year","gpa":"if mentioned","honors":"cum laude, dean's list, etc."}],
-  "skills": ["skill1","skill2"],
-  "certifications": [{"name":"cert name","issuer":"issuing org","year":"year obtained"}],
-  "projects": [{"name":"project name","description":"what it does","technologies":"tech used"}],
-  "languages": [{"language":"English","proficiency":"Native"}],
-  "volunteer": [{"role":"role","organization":"org","description":"what they did"}],
-  "publications": ["publication title or citation"],
-  "awards": ["award or honor"]
-}
-Rules:
-- Extract ALL sections from the resume - do not skip certifications, projects, languages, volunteer work, publications, awards, or any other section
-- If a field is not found, use empty string or empty array
-- For skills, split into individual items (not comma-separated strings)
-- For education, capture field of study, GPA, and honors separately
-- Capture LinkedIn, GitHub, portfolio URLs if present`,
-      },
-      { role: "user", content: text },
-    ]);
-    const parsed = JSON.parse(res.content);
-    return {
-      ...emptyResume,
-      ...parsed,
-      rawText: text,
-      name: "",
-      certifications: parsed.certifications || [],
-      projects: parsed.projects || [],
-      languages: parsed.languages || [],
-      volunteer: parsed.volunteer || [],
-      publications: parsed.publications || [],
-      awards: parsed.awards || [],
-    };
-  };
-
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -161,7 +47,7 @@ Rules:
     try {
       const text = await extractTextFromPdf(file);
       setUploadProgress({ step: "Analyzing with AI...", percent: 45 });
-      const parsed = await parseWithAI(text);
+      const parsed = await parseResumeText(text);
       setUploadProgress({ step: "Done!", percent: 100 });
       // Show name modal instead of auto-saving
       const suggested = generateResumeName(parsed, resumes.length);

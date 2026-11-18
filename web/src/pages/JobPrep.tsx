@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { useParams, useNavigate, Link } from "react-router-dom";
+import { useParams, useNavigate, Link, useSearchParams } from "react-router-dom";
 import { ArrowLeft, ArrowRight, ScanSearch, FileText, Mail, MessageSquare, Loader2, Copy, Sparkles, Check, X, Download, BookOpen, Volume2, VolumeX, Video, VideoOff, PhoneOff, Maximize2, Minimize2, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import { api, type LessonQueue } from "@/lib/api";
@@ -59,6 +59,10 @@ export default function JobPrep() {
   const [resumes, setResumes] = useState<any[]>([]);
   const [selectedResumeId, setSelectedResumeId] = useState("");
   const [activeTab, setActiveTab] = useState("overview");
+  // The product tour opens a given tab with ?tab=.
+  const [searchParams] = useSearchParams();
+  const tabParam = searchParams.get("tab");
+  useEffect(() => { if (tabParam && TABS.some((t) => t.key === tabParam)) setActiveTab(tabParam); }, [tabParam]);
   const [loading, setLoading] = useState(true);
 
   // Persisted results (saved in job.prep_data)
@@ -112,7 +116,7 @@ export default function JobPrep() {
   const companyFacts: string[] = job?.prep_data?.company_facts?.company === job?.company ? job?.prep_data?.company_facts?.facts || [] : [];
   useEffect(() => {
     const cur = jobRef.current;
-    if (!cur?.company || /^unknown$/i.test(cur.company) || cur.prep_data?.company_facts?.company === cur.company) return;
+    if (!cur?.company || cur.demo || /^unknown$/i.test(cur.company) || cur.prep_data?.company_facts?.company === cur.company) return;
     api.companyFacts(cur.company, cur.title || "", cur.raw_description || "")
       .then((r) => { if (r.facts?.length) persistPrep({ company_facts: { company: cur.company, facts: r.facts } }); })
       .catch(() => { /* optional: quotes are shown instead */ });
@@ -145,6 +149,7 @@ export default function JobPrep() {
 
   // Every AI tool reads the job description; some search results arrive without one.
   const hasDescription = () => {
+    if (jobRef.current?.demo) { toast.info("This is the sample job from the tour. Add a real job from the Jobs page to use the AI tools."); return false; }
     if ((jobRef.current?.raw_description?.trim().length || 0) >= MIN_DESCRIPTION) return true;
     toast.error(jobRef.current?.raw_description?.trim() ? "The job description is too short. Paste the full posting on the Overview tab." : "Add the job description on the Overview tab first");
     setActiveTab("overview");
@@ -290,7 +295,13 @@ export default function JobPrep() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 mb-5 overflow-x-auto border-b border-white/10 pb-0">
+      {job.demo && (
+        <div className="mb-4 p-3 rounded-lg border border-[#028FA2]/30 bg-[#028FA2]/[0.08] text-xs text-[#9be7ef]">
+          This is a sample job for the tour. Its results are examples; the AI buttons are turned off here.
+        </div>
+      )}
+
+      <div data-tour="job-tabs" className="flex gap-1 mb-5 overflow-x-auto border-b border-white/10 pb-0">
         {TABS.map(({ key, label, icon: Icon }) => (
           <button
             key={key}
@@ -305,7 +316,7 @@ export default function JobPrep() {
       </div>
 
       {/* Tab content */}
-      <div className="bg-[#1a1a1a] rounded-xl border border-white/10 p-5 min-h-[300px]">
+      <div data-tour="job-tab-content" className="bg-[#1a1a1a] rounded-xl border border-white/10 p-5 min-h-[300px]">
         {activeTab === "overview" && <OverviewTab job={job} onSaveDescription={saveDescription} />}
         {activeTab === "ats" && <ATSTab result={atsResult} loading={tabLoading} onRun={runATS} currentBasis={fingerprint(job.raw_description || "", getResumeText())} />}
         {activeTab === "tailor" && (
