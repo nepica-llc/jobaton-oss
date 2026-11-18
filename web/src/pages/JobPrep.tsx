@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { ArrowLeft, ArrowRight, ScanSearch, FileText, Mail, MessageSquare, Loader2, Copy, Sparkles, Check, X, Download, BookOpen, Volume2, VolumeX } from "lucide-react";
+import { ArrowLeft, ArrowRight, ScanSearch, FileText, Mail, MessageSquare, Loader2, Copy, Sparkles, Check, X, Download, BookOpen, Volume2, VolumeX, Video, VideoOff, PhoneOff, Maximize2, Minimize2, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import { api, type LessonQueue } from "@/lib/api";
 import LetterPaper from "@/components/LetterPaper";
@@ -224,13 +224,13 @@ export default function JobPrep() {
     finally { stopLoading(); }
   };
 
-  const runInterviewPrep = async (stage: string, interviewer: string) => {
+  const runInterviewPrep = async (stage: string) => {
     if (!hasDescription()) return;
     startLoading("interview");
     try {
-      const result = await api.interviewPrep(job.title || "", job.company || "", job.raw_description || "", stage, interviewer || undefined);
+      const result = await api.interviewPrep(job.title || "", job.company || "", job.raw_description || "", stage);
       const prev = normalizeInterview(interviewResult);
-      const merged = { stages: { ...prev, [stage]: { ...result, interviewer: interviewer || "" } } };
+      const merged = { stages: { ...prev, [stage]: result } };
       setInterviewResult(merged);
       await persistPrep({ interview: merged });
     } catch (err: any) { toast.error(err.message); }
@@ -302,7 +302,7 @@ export default function JobPrep() {
         )}
         {activeTab === "cover-letter" && <CoverLetterTab result={coverLetterResult} loading={tabLoading} onRun={runCoverLetter} fileBase={safeFileName("Cover Letter", job.company, job.title)} />}
         {activeTab === "study-guide" && <StudyGuideTab jobId={job.id} company={job.company || ""} facts={companyFacts} result={studyGuideResult} loading={tabLoading} onRun={runStudyGuide} onSave={(training) => { const next = { ...studyGuideResult, training }; setStudyGuideResult(next); return persistPrep({ study_guide: next }); }} jobDescription={job.raw_description || ""} />}
-        {activeTab === "interview" && <InterviewTab result={interviewResult} loading={tabLoading} onRun={runInterviewPrep} jobTitle={job.title || ""} jobDescription={job.raw_description || ""} />}
+        {activeTab === "interview" && <InterviewTab result={interviewResult} loading={tabLoading} onRun={runInterviewPrep} company={job.company || ""} />}
       </div>
 
       {/* ─── Full-screen AI Processing Overlay ─── */}
@@ -1442,78 +1442,45 @@ function parseStageQuestions(data: any) {
         { label: "Partially correct", correct: false },
       ];
       if (!opts.some((o: any) => o.correct)) opts[0].correct = true;
+      shuffleStable(opts, q.question);
       all.push({ question: q.question, options: opts, timeLimit: q.timeLimit || defaultTime, difficulty: diff, explanation: q.explanation || "" });
     });
   });
   const order: Record<string, number> = { easy: 0, medium: 1, hard: 2 };
   all.sort((a, b) => order[a.difficulty] - order[b.difficulty]);
-  return { all, overview: data?.overview || "", tips: (data?.tips || []) as string[], insights: (data?.interviewerInsights || []) as string[] };
+  return { all, overview: data?.overview || "", tips: (data?.tips || []) as string[] };
 }
 
-function InterviewTab({ result, loading, onRun }: { result: any; loading: boolean; onRun: (stage: string, interviewer: string) => void; jobTitle?: string; jobDescription?: string }) {
+// AIs tend to list the right answer first. Shuffle with a seed from the question text so the order
+// is mixed but stays the same on every render and every retake.
+function shuffleStable<T>(items: T[], seedText: string) {
+  let seed = 0;
+  for (let i = 0; i < seedText.length; i++) seed = (seed * 31 + seedText.charCodeAt(i)) >>> 0;
+  for (let i = items.length - 1; i > 0; i--) {
+    seed = (seed * 1664525 + 1013904223) >>> 0;
+    const j = seed % (i + 1);
+    [items[i], items[j]] = [items[j], items[i]];
+  }
+}
+
+function InterviewTab({ result, loading, onRun, company }: { result: any; loading: boolean; onRun: (stage: string) => void; company: string }) {
   const stages = normalizeInterview(result);
   const tabs = [...(stages.general ? [{ key: "general", label: "General", desc: "Your earlier interview prep." }] : []), ...INTERVIEW_STAGES];
   const [stage, setStage] = useState<string>(() => tabs.find((t) => stages[t.key])?.key || "recruiter");
-  const [interviewer, setInterviewer] = useState<Record<string, string>>(() =>
-    Object.fromEntries(Object.entries(stages).map(([k, v]: [string, any]) => [k, v?.interviewer || ""])));
   const [mode, setMode] = useState<"lobby" | "zone" | "review">("lobby");
-  const [currentQ, setCurrentQ] = useState(0);
+  const [attempt, setAttempt] = useState(0);
   const [answers, setAnswers] = useState<Record<number, number>>({});
-  const [timeLeft, setTimeLeft] = useState(0);
   const [totalTime, setTotalTime] = useState(0);
-  const [showExplanation, setShowExplanation] = useState(false);
 
   const stageData = stages[stage];
   const stageInfo = tabs.find((t) => t.key === stage)!;
   const parsed = parseStageQuestions(stageData);
   const questions = parsed.all;
 
-  // Timer per question
-  useEffect(() => {
-    if (mode !== "zone") return;
-    setTimeLeft(questions[currentQ]?.timeLimit || 30);
-    setShowExplanation(false);
-  }, [currentQ, mode]);
-
-  // Global timer
-  useEffect(() => {
-    if (mode !== "zone") return;
-    const t = setInterval(() => setTotalTime((p) => p + 1), 1000);
-    return () => clearInterval(t);
-  }, [mode]);
-
-  useEffect(() => {
-    if (mode !== "zone" || timeLeft <= 0) {
-      if (timeLeft === 0 && mode === "zone" && answers[currentQ] === undefined) {
-        // Auto-skip on timeout
-        setAnswers((p) => ({ ...p, [currentQ]: -1 }));
-        setShowExplanation(true);
-      }
-      return;
-    }
-    const t = setTimeout(() => setTimeLeft((p) => p - 1), 1000);
-    return () => clearTimeout(t);
-  }, [timeLeft, mode]);
-
-  const handleSelect = (optIdx: number) => {
-    if (answers[currentQ] !== undefined) return;
-    setAnswers((p) => ({ ...p, [currentQ]: optIdx }));
-    setShowExplanation(true);
-  };
-
-  const handleNext = () => {
-    if (currentQ < questions.length - 1) {
-      setCurrentQ((p) => p + 1);
-      setShowExplanation(false);
-    } else {
-      setMode("review");
-    }
-  };
-
   const startInterview = () => {
-    setCurrentQ(0);
     setAnswers({});
     setTotalTime(0);
+    setAttempt((n) => n + 1);
     setMode("zone");
   };
 
@@ -1586,106 +1553,28 @@ function InterviewTab({ result, loading, onRun }: { result: any; loading: boolea
         </details>
 
         <div className="flex gap-3">
-          <button onClick={() => { setMode("lobby"); setCurrentQ(0); setAnswers({}); }} className="flex-1 px-4 py-2.5 text-sm font-medium text-[#888] bg-white/[0.04] border border-white/10 rounded-xl hover:bg-gray-100">Back to rounds</button>
+          <button onClick={() => { setMode("lobby"); setAnswers({}); }} className="flex-1 px-4 py-2.5 text-sm font-medium text-[#888] bg-white/[0.04] border border-white/10 rounded-xl hover:bg-gray-100">Back to rounds</button>
           <button onClick={startInterview} className="flex-1 px-4 py-2.5 text-sm font-medium text-white bg-[#028FA2] rounded-xl hover:bg-[#027a8c]">Retake</button>
         </div>
       </div>
     );
   }
 
-  // ─── INTERVIEW ZONE (timed mode) ───
+  // ─── INTERVIEW CALL ───
   if (mode === "zone" && questions.length > 0) {
-    const q = questions[currentQ];
-    const selected = answers[currentQ];
-    const diffColor = q?.difficulty === "easy" ? "text-green-600" : q?.difficulty === "hard" ? "text-red-600" : "text-amber-600";
-    const diffBg = q?.difficulty === "easy" ? "bg-green-50 border-green-200" : q?.difficulty === "hard" ? "bg-red-50 border-red-200" : "bg-amber-50 border-amber-200";
-
     return (
-      <div className="space-y-4">
-        <div className="flex items-center justify-between p-3 bg-[#0a2540] rounded-xl text-white">
-          <div className="flex items-center gap-3">
-            <div className={`h-2.5 w-2.5 rounded-full ${timeLeft > 10 ? "bg-green-400 animate-pulse" : "bg-red-400 animate-pulse"}`} />
-            <span className="text-sm font-mono font-bold">{formatTime(timeLeft)}</span>
-            <span className="text-[0.667rem] text-gray-400 border-l border-gray-600 pl-3">Total: {formatTime(totalTime)}</span>
-          </div>
-          <div className="flex items-center gap-3">
-            <span className="text-[0.667rem] text-gray-300 hidden sm:inline">{stageInfo.label}</span>
-            <span className={`text-[0.6rem] font-bold uppercase px-2 py-0.5 rounded ${diffBg} ${diffColor}`}>{q?.difficulty}</span>
-            <span className="text-xs text-gray-300">Q{currentQ + 1}/{questions.length}</span>
-          </div>
-        </div>
-
-        <div className="h-1.5 rounded-full bg-gray-800/20">
-          <div className={`h-full rounded-full transition-all duration-1000 ${timeLeft > 10 ? "bg-[#028FA2]" : "bg-red-500"}`} style={{ width: `${(timeLeft / (q?.timeLimit || 30)) * 100}%` }} />
-        </div>
-
-        <div className="p-8 bg-white/[0.02] rounded-lg border border-white/10 text-center min-h-[140px] flex items-center justify-center">
-          <h3 className="text-lg font-semibold text-white leading-relaxed">{q?.question}</h3>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-          {q?.options?.map((opt: any, oi: number) => {
-            const isSelected = selected === oi;
-            const isCorrect = opt.correct;
-            const showResult = selected !== undefined;
-            let cls = "border-white/10 hover:border-[#028FA2]/50 hover:bg-[#028FA2]/10";
-            if (showResult && isSelected && isCorrect) cls = "border-green-400 bg-green-50 shadow-sm";
-            if (showResult && isSelected && !isCorrect) cls = "border-red-400 bg-red-50 shadow-sm";
-            if (showResult && !isSelected && isCorrect) cls = "border-green-300 bg-green-50/50";
-            return (
-              <button key={oi} onClick={() => handleSelect(oi)} disabled={selected !== undefined} className={`flex items-center gap-3 rounded-xl border-2 p-4 text-left transition-all ${cls}`}>
-                <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${showResult && isCorrect ? "bg-green-500 text-white" : showResult && isSelected && !isCorrect ? "bg-red-500 text-white" : "bg-gray-100 text-[#888]"}`}>
-                  {showResult && isCorrect ? "✓" : showResult && isSelected && !isCorrect ? "✗" : String.fromCharCode(65 + oi)}
-                </span>
-                <span className="text-sm text-white">{opt.label}</span>
-              </button>
-            );
-          })}
-        </div>
-
-        {showExplanation && q?.explanation && (
-          <div className="p-3 bg-[#028FA2]/10 border border-[#028FA2]/20 rounded-xl animate-fade-in">
-            <p className="text-xs text-white"><strong>Explanation:</strong> {q.explanation}</p>
-          </div>
-        )}
-
-        {selected !== undefined && (
-          <div className="flex justify-end">
-            <button onClick={handleNext} className="flex items-center gap-1.5 px-5 py-2.5 text-sm font-medium text-white bg-[#028FA2] rounded-xl hover:bg-[#027a8c] transition-colors">
-              {currentQ < questions.length - 1 ? <>Next <ArrowRight className="h-3.5 w-3.5" /></> : <>Finish round <Check className="h-3.5 w-3.5" /></>}
-            </button>
-          </div>
-        )}
-
-        <div className="flex items-center gap-0.5">
-          {questions.map((_: any, i: number) => {
-            const a = answers[i];
-            const done = a !== undefined;
-            const correct = done && a >= 0 && questions[i]?.options[a]?.correct;
-            return <div key={i} className={`h-1.5 flex-1 rounded-full transition-all ${done ? (correct ? "bg-green-500" : a === -1 ? "bg-gray-400" : "bg-red-400") : i === currentQ ? "bg-[#028FA2]" : "bg-gray-200"}`} />;
-          })}
-        </div>
-      </div>
+      <InterviewCall
+        key={attempt}
+        questions={questions}
+        stageLabel={stageInfo.label}
+        company={company}
+        onLeave={() => setMode("lobby")}
+        onFinish={(a, seconds) => { setAnswers(a); setTotalTime(seconds); setMode("review"); }}
+      />
     );
   }
 
-  // ─── LOBBY: pick a stage, optionally add the interviewer, generate or start ───
-  const interviewerField = stage !== "general" && (
-    <div className="text-left">
-      <label htmlFor="interviewer-profile" className="block text-xs font-medium text-white mb-1">Interviewer's LinkedIn profile (optional)</label>
-      <p className="text-[0.667rem] text-[#555] mb-2">Open their public LinkedIn profile, copy the name, headline, About and Experience sections, and paste them here. Questions will be tailored to their background. It stays on your machine and is only sent to your AI provider.</p>
-      <textarea
-        id="interviewer-profile"
-        value={interviewer[stage] || ""}
-        onChange={(e) => setInterviewer((p) => ({ ...p, [stage]: e.target.value }))}
-        rows={4}
-        maxLength={6000}
-        placeholder={"Jane Doe\nDirector of Identity Engineering at Acme\nAbout: ...\nExperience: ..."}
-        className="glass-input w-full rounded-lg px-3 py-2 text-xs"
-      />
-    </div>
-  );
-
+  // ─── LOBBY: pick a stage, generate or start ───
   return (
     <div className="space-y-5">
       <div>
@@ -1718,9 +1607,8 @@ function InterviewTab({ result, loading, onRun }: { result: any; loading: boolea
             <h3 className="text-base font-bold text-white">{stageInfo.label}</h3>
             <p className="text-sm text-[#888] mt-1">{stageInfo.desc} 12 timed multiple-choice questions, easy to hard.</p>
           </div>
-          {interviewerField}
           <div className="text-center">
-            <button onClick={() => onRun(stage, interviewer[stage] || "")} className="px-5 py-2.5 bg-[#028FA2] text-white text-sm font-medium rounded-xl hover:bg-[#027a8c]">
+            <button onClick={() => onRun(stage)} className="px-5 py-2.5 bg-[#028FA2] text-white text-sm font-medium rounded-xl hover:bg-[#027a8c]">
               Generate {stageInfo.label} prep
             </button>
           </div>
@@ -1728,17 +1616,6 @@ function InterviewTab({ result, loading, onRun }: { result: any; loading: boolea
       ) : (
         <>
           {parsed.overview && <p className="text-sm text-[#888]">{parsed.overview}</p>}
-
-          {parsed.insights.length > 0 && (
-            <div className="border border-[#028FA2]/20 bg-[#028FA2]/[0.04] rounded-xl p-4">
-              <h4 className="text-xs font-semibold text-white uppercase mb-2">About your interviewer</h4>
-              <ul className="space-y-1">
-                {parsed.insights.map((tip: string, i: number) => (
-                  <li key={i} className="text-xs text-[#888] flex items-start gap-2"><span className="text-[#028FA2] mt-0.5">•</span> {tip}</li>
-                ))}
-              </ul>
-            </div>
-          )}
 
           <div className="grid grid-cols-3 gap-3">
             {(["easy", "medium", "hard"] as const).map((d) => (
@@ -1770,16 +1647,243 @@ function InterviewTab({ result, loading, onRun }: { result: any; loading: boolea
           )}
 
           {stage !== "general" && (
-            <details className="border border-white/[0.06] rounded-xl p-4">
-              <summary className="text-xs font-medium text-[#028FA2] cursor-pointer">Regenerate this round{stageData?.interviewer ? " (interviewer added)" : ", optionally for a specific interviewer"}</summary>
-              <div className="mt-3 space-y-3">
-                {interviewerField}
-                <button onClick={() => onRun(stage, interviewer[stage] || "")} className="px-4 py-2 text-xs font-medium text-white bg-[#028FA2] rounded-lg hover:bg-[#027a8c]">Regenerate {stageInfo.label}</button>
-              </div>
-            </details>
+            <button onClick={() => onRun(stage)} className="text-xs font-medium text-[#028FA2] hover:underline">Regenerate {stageInfo.label} questions</button>
           )}
         </>
       )}
+    </div>
+  );
+}
+
+// ─── Interview call ──────────────────────────────────────────────────────────
+// One round run like a video call: the interviewer tile asks (and reads aloud) each question, the candidate
+// answers on the side. Fullscreen hides everything else. Keys: 1-4 or A-D answer, Enter next, F fullscreen.
+function InterviewCall({ questions, stageLabel, company, onLeave, onFinish }: {
+  questions: any[]; stageLabel: string; company: string;
+  onLeave: () => void; onFinish: (answers: Record<number, number>, seconds: number) => void;
+}) {
+  const limitOf = (i: number): number => (questions[i]?.timeLimit > 0 ? questions[i].timeLimit : 120);
+  const [currentQ, setCurrentQ] = useState(0);
+  const [answers, setAnswers] = useState<Record<number, number>>({});
+  // Set together with currentQ (never in an effect), so a new question can't inherit the last one's 0 and auto-skip.
+  const [timeLeft, setTimeLeft] = useState<number>(() => limitOf(0));
+  const [totalTime, setTotalTime] = useState(0);
+  const [voiceOn, setVoiceOn] = useState(true);
+  const [speaking, setSpeaking] = useState(false);
+  const [cameraOn, setCameraOn] = useState(false);
+  const [full, setFull] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+
+  const q = questions[currentQ];
+  const selected = answers[currentQ];
+  const answered = selected !== undefined;
+  const isLast = currentQ === questions.length - 1;
+  const fmt = (s: number) => `${Math.floor(s / 60).toString().padStart(2, "0")}:${(s % 60).toString().padStart(2, "0")}`;
+  const initials = stageLabel.split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase();
+  const canSpeak = typeof window !== "undefined" && "speechSynthesis" in window;
+
+  // Question countdown: stops once answered; reaching 0 counts as skipped.
+  useEffect(() => {
+    if (answered) return;
+    if (timeLeft <= 0) { setAnswers((p) => ({ ...p, [currentQ]: -1 })); return; }
+    const t = setTimeout(() => setTimeLeft((s) => s - 1), 1000);
+    return () => clearTimeout(t);
+  }, [timeLeft, answered, currentQ]);
+
+  useEffect(() => {
+    const t = setInterval(() => setTotalTime((s) => s + 1), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  // The interviewer reads each question aloud.
+  const speak = useCallback((text: string) => {
+    if (!canSpeak) return;
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.rate = 1;
+    u.onstart = () => setSpeaking(true);
+    u.onend = u.onerror = () => setSpeaking(false);
+    window.speechSynthesis.speak(u);
+  }, [canSpeak]);
+  useEffect(() => {
+    if (voiceOn && q?.question) speak(q.question);
+    else if (canSpeak) { window.speechSynthesis.cancel(); setSpeaking(false); }
+  }, [currentQ, voiceOn]);
+
+  // Self view. Nothing is recorded or sent anywhere.
+  useEffect(() => {
+    if (!cameraOn) return;
+    let cancelled = false;
+    navigator.mediaDevices?.getUserMedia({ video: true, audio: false })
+      .then((stream) => {
+        if (cancelled) { stream.getTracks().forEach((t) => t.stop()); return; }
+        streamRef.current = stream;
+        if (videoRef.current) videoRef.current.srcObject = stream;
+      })
+      .catch(() => { toast.error("Camera not available. Check your browser permissions."); setCameraOn(false); });
+    return () => {
+      cancelled = true;
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    };
+  }, [cameraOn]);
+
+  // Fullscreen with the browser API when available, otherwise a fixed overlay. Esc leaves either.
+  useEffect(() => {
+    const sync = () => setFull(document.fullscreenElement === rootRef.current);
+    document.addEventListener("fullscreenchange", sync);
+    return () => document.removeEventListener("fullscreenchange", sync);
+  }, []);
+  const toggleFull = () => {
+    const el = rootRef.current;
+    if (document.fullscreenElement) { document.exitFullscreen().catch(() => {}); return; }
+    if (full) { setFull(false); return; }
+    if (el?.requestFullscreen) el.requestFullscreen().catch(() => setFull(true));
+    else setFull(true);
+  };
+
+  const stopEverything = () => {
+    if (canSpeak) window.speechSynthesis.cancel();
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  };
+  useEffect(() => () => { if (canSpeak) window.speechSynthesis.cancel(); }, []);
+
+  const choose = (i: number) => {
+    if (answered || i < 0 || i >= (q?.options?.length || 0)) return;
+    setAnswers((p) => ({ ...p, [currentQ]: i }));
+  };
+  const next = () => {
+    if (!answered) return;
+    if (isLast) { stopEverything(); onFinish(answers, totalTime); return; }
+    setCurrentQ((i) => i + 1);
+    setTimeLeft(limitOf(currentQ + 1));
+  };
+  const leave = () => { stopEverything(); onLeave(); };
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.metaKey || e.ctrlKey || e.altKey) return;
+      const k = e.key.toLowerCase();
+      if (["1", "2", "3", "4"].includes(k)) choose(Number(k) - 1);
+      else if (["a", "b", "c", "d"].includes(k)) choose(k.charCodeAt(0) - 97);
+      else if (k === "enter" || k === "arrowright") next();
+      else if (k === "f") toggleFull();
+      else if (k === "escape" && full && !document.fullscreenElement) setFull(false);
+      else return;
+      e.preventDefault();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
+
+  const C = { stage: "#0b0d12", tile: "#1b1f27", tileBorder: "rgba(255,255,255,0.08)", text: "#f3f4f6", muted: "#9ca3af", accent: "#028FA2" };
+  const lowTime = !answered && timeLeft <= 10;
+  const ctrl = "flex flex-col items-center gap-1 min-w-[3.5rem] px-2 py-1.5 rounded-lg text-[0.667rem] transition-colors hover:bg-white/10";
+
+  return (
+    <div ref={rootRef} className={`${full ? "fixed inset-0 z-[60] rounded-none" : "rounded-xl"} flex flex-col overflow-hidden`} style={{ background: C.stage, color: C.text, minHeight: full ? undefined : 560 }}>
+      {/* Top bar */}
+      <div className="flex items-center justify-between gap-3 px-4 py-2.5" style={{ borderBottom: `1px solid ${C.tileBorder}` }}>
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="h-2 w-2 rounded-full shrink-0 animate-pulse" style={{ background: "#ef4444" }} aria-hidden="true" />
+          <span className="text-sm font-semibold truncate">{stageLabel} interview{company ? ` · ${company}` : ""}</span>
+        </div>
+        <div className="flex items-center gap-3 text-xs shrink-0" style={{ color: C.muted }}>
+          <span className="font-mono">{fmt(totalTime)}</span>
+          <span>Question {currentQ + 1} of {questions.length}</span>
+        </div>
+      </div>
+      <div className="flex gap-0.5 px-4 pt-2" aria-hidden="true">
+        {questions.map((_, i) => {
+          const a = answers[i];
+          const ok = a !== undefined && a >= 0 && questions[i]?.options[a]?.correct;
+          const bg = a === undefined ? (i === currentQ ? C.accent : "rgba(255,255,255,0.12)") : ok ? "#22c55e" : a === -1 ? "#6b7280" : "#ef4444";
+          return <div key={i} className="h-1 flex-1 rounded-full" style={{ background: bg }} />;
+        })}
+      </div>
+
+      {/* Call area */}
+      <div className="flex-1 grid gap-3 p-3 sm:p-4 lg:grid-cols-[1.4fr_1fr] min-h-0">
+        {/* Interviewer tile */}
+        <div className="relative rounded-xl flex flex-col items-center justify-center p-6 min-h-[260px] overflow-hidden" style={{ background: C.tile, border: `2px solid ${speaking ? C.accent : C.tileBorder}` }}>
+          <div className={`flex h-24 w-24 items-center justify-center rounded-full text-2xl font-bold ${speaking ? "animate-pulse" : ""}`} style={{ background: "linear-gradient(135deg,#028FA2,#0a2540)", boxShadow: speaking ? `0 0 0 6px rgba(2,143,162,0.25)` : "none" }}>
+            {initials}
+          </div>
+          <p className="mt-6 text-center text-lg sm:text-xl font-medium leading-relaxed max-w-2xl" aria-live="polite">{q?.question}</p>
+          <span className="absolute left-3 bottom-3 text-xs px-2 py-1 rounded-md" style={{ background: "rgba(0,0,0,0.55)" }}>
+            {stageLabel}{company ? ` · ${company}` : ""}{speaking ? " · speaking" : ""}
+          </span>
+          <span className={`absolute right-3 top-3 font-mono text-sm px-2 py-1 rounded-md ${lowTime ? "animate-pulse" : ""}`} style={{ background: lowTime ? "rgba(239,68,68,0.85)" : "rgba(0,0,0,0.55)" }} aria-label={`Time left ${fmt(timeLeft)}`}>
+            {answered ? "Answered" : fmt(timeLeft)}
+          </span>
+        </div>
+
+        {/* Self view + answers */}
+        <div className="flex flex-col gap-3 min-h-0">
+          <div className="relative rounded-xl overflow-hidden h-28 sm:h-36 flex items-center justify-center shrink-0" style={{ background: C.tile, border: `1px solid ${C.tileBorder}` }}>
+            {cameraOn ? <video ref={videoRef} autoPlay playsInline muted className="h-full w-full object-cover" style={{ transform: "scaleX(-1)" }} />
+              : <div className="flex h-14 w-14 items-center justify-center rounded-full text-sm font-semibold" style={{ background: "#374151" }}>You</div>}
+            <span className="absolute left-2 bottom-2 text-[0.667rem] px-1.5 py-0.5 rounded" style={{ background: "rgba(0,0,0,0.55)" }}>You</span>
+          </div>
+
+          <div className="rounded-xl p-3 flex-1 overflow-y-auto space-y-2" style={{ background: C.tile, border: `1px solid ${C.tileBorder}` }}>
+            <p className="text-[0.667rem] uppercase tracking-wider font-bold" style={{ color: C.muted }}>Your answer</p>
+            {q?.options?.map((opt: any, oi: number) => {
+              const isSel = selected === oi;
+              let border = C.tileBorder, bg = "transparent";
+              if (answered && opt.correct) { border = "#22c55e"; bg = "rgba(34,197,94,0.12)"; }
+              else if (answered && isSel) { border = "#ef4444"; bg = "rgba(239,68,68,0.12)"; }
+              return (
+                <button key={oi} onClick={() => choose(oi)} disabled={answered}
+                  className="w-full flex items-start gap-2.5 rounded-lg p-2.5 text-left text-sm transition-colors enabled:hover:bg-white/5"
+                  style={{ border: `1.5px solid ${border}`, background: bg, color: C.text }}>
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold" style={{ background: answered && opt.correct ? "#22c55e" : answered && isSel ? "#ef4444" : "rgba(255,255,255,0.1)" }}>
+                    {answered && opt.correct ? "✓" : answered && isSel ? "✗" : String.fromCharCode(65 + oi)}
+                  </span>
+                  <span className="leading-snug">{opt.label}</span>
+                </button>
+              );
+            })}
+            {answered && (
+              <div className="pt-1 space-y-2 animate-fade-in">
+                <p className="text-xs" style={{ color: selected === -1 ? "#fbbf24" : q?.options[selected]?.correct ? "#4ade80" : "#f87171" }}>
+                  {selected === -1 ? "Time is up." : q?.options[selected]?.correct ? "Strong answer." : "Not the strongest answer."}
+                </p>
+                {q?.explanation && <p className="text-xs leading-relaxed" style={{ color: C.muted }}>{q.explanation}</p>}
+                <button onClick={next} className="w-full flex items-center justify-center gap-1.5 rounded-lg py-2 text-sm font-medium" style={{ background: C.accent, color: "#fff" }}>
+                  {isLast ? <>Finish round <Check className="h-3.5 w-3.5" /></> : <>Next question <ArrowRight className="h-3.5 w-3.5" /></>}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Controls */}
+      <div className="flex items-center justify-center gap-1 sm:gap-2 px-3 py-2.5" style={{ borderTop: `1px solid ${C.tileBorder}`, background: "#111318" }}>
+        {canSpeak && (
+          <button onClick={() => setVoiceOn((v) => !v)} className={ctrl} aria-pressed={voiceOn} aria-label={voiceOn ? "Mute interviewer voice" : "Unmute interviewer voice"}>
+            {voiceOn ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}<span>{voiceOn ? "Voice on" : "Voice off"}</span>
+          </button>
+        )}
+        {canSpeak && (
+          <button onClick={() => q?.question && speak(q.question)} className={ctrl} aria-label="Repeat the question">
+            <RotateCcw className="h-4 w-4" /><span>Repeat</span>
+          </button>
+        )}
+        <button onClick={() => setCameraOn((v) => !v)} className={ctrl} aria-pressed={cameraOn} aria-label={cameraOn ? "Turn camera off" : "Turn camera on"}>
+          {cameraOn ? <Video className="h-4 w-4" /> : <VideoOff className="h-4 w-4" />}<span>{cameraOn ? "Camera on" : "Camera off"}</span>
+        </button>
+        <button onClick={toggleFull} className={ctrl} aria-pressed={full} aria-label={full ? "Exit full screen" : "Full screen"}>
+          {full ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}<span>{full ? "Exit full" : "Full screen"}</span>
+        </button>
+        <button onClick={leave} className="flex flex-col items-center gap-1 min-w-[3.5rem] px-3 py-1.5 rounded-lg text-[0.667rem] ml-2" style={{ background: "#dc2626", color: "#fff" }} aria-label="Leave the interview">
+          <PhoneOff className="h-4 w-4" /><span>Leave</span>
+        </button>
+      </div>
+      <p className="hidden sm:block text-center text-[0.6rem] pb-2" style={{ color: "#6b7280", background: "#111318" }}>Keys: 1 to 4 to answer, Enter for next, F for full screen. Your camera is only shown to you and never recorded.</p>
     </div>
   );
 }

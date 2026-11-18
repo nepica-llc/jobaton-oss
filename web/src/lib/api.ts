@@ -92,8 +92,8 @@ export const api = {
   queueLessons: (jobId: string, items: { mod: number; lesson: number; fresh?: boolean }[]) =>
     request<LessonQueue>(`/jobs/${jobId}/lessons`, { method: "POST", body: JSON.stringify({ items }) }),
   lessonStatus: (jobId: string) => request<LessonQueue>(`/jobs/${jobId}/lessons`),
-  interviewPrep: (jobTitle: string, company: string, jobDescription: string, stage: string, interviewer?: string) =>
-    request("/ai/interview-prep", { method: "POST", body: JSON.stringify({ jobTitle, company, jobDescription, stage, interviewer }) }),
+  interviewPrep: (jobTitle: string, company: string, jobDescription: string, stage: string) =>
+    request("/ai/interview-prep", { method: "POST", body: JSON.stringify({ jobTitle, company, jobDescription, stage }) }),
   mockInterview: (jobTitle: string, jobDescription: string, resumeText: string, messages: any[]) =>
     request("/ai/mock-interview", { method: "POST", body: JSON.stringify({ jobTitle, jobDescription, resumeText, messages }) }),
   chat: (messages: any[], model?: string) =>
